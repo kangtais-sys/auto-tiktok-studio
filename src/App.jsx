@@ -112,6 +112,30 @@ export default function App() {
   const [analyzing, setAnalyzing] = useState(false);
   const chatRef = useRef(null);
   useEffect(() => { chatRef.current?.scrollTo(0,9999); }, [chatMsgs]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const state = params.get("state");
+    if (!code) return;
+    const savedState = sessionStorage.getItem("tt_state");
+    if (state !== savedState) return;
+    const CLIENT_KEY = import.meta.env.VITE_TIKTOK_CLIENT_KEY;
+    const CLIENT_SECRET = import.meta.env.VITE_TIKTOK_CLIENT_SECRET;
+    const codeVerifier = sessionStorage.getItem("tt_code_verifier");
+    const redirectUri = window.location.origin + "/tiktok-callback";
+    fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ client_key: CLIENT_KEY, client_secret: CLIENT_SECRET, code, grant_type: "authorization_code", redirect_uri: redirectUri, code_verifier: codeVerifier })
+    }).then(r=>r.json()).then(data=>{
+      if (data.access_token) {
+        localStorage.setItem("tt_token", data.access_token);
+        setTiktokToken(data.access_token);
+        window.history.replaceState({}, "", "/");
+      }
+    });
+  }, []);
   const [posts, setPosts] = useState(INIT_POSTS);
   const [newDate, setNewDate] = useState("");
   const [newTime, setNewTime] = useState("09:00");
