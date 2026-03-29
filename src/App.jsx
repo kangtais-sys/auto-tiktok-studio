@@ -90,7 +90,7 @@ const INIT_TEMPLATES = [
 
 export default function App() {
   const [tab, setTab] = useState("create");
-  const [accounts, setAccounts] = useState([{id:0,user:"virtual_beauty_kr",service:"Later",country:"KR"}]);
+  const [accounts, setAccounts] = useState([]);
   const [showAccModal, setShowAccModal] = useState(false);
   const [accStep, setAccStep] = useState(1);
   const [accForm, setAccForm] = useState({service:"later",tiktokUser:"",apiKey:"",email:"",country:"KR"});
