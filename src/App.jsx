@@ -243,7 +243,7 @@ export default function App() {
   const loginTikTok = async () => {
     const CLIENT_KEY = import.meta.env.VITE_TIKTOK_CLIENT_KEY;
     const redirectUri = encodeURIComponent(window.location.origin + "/tiktok-callback");
-    const scope = encodeURIComponent("user.info.basic,video.publish,video.list");
+    const scope = encodeURIComponent("user.info.basic,video.upload,video.list");
     const state = Math.random().toString(36).slice(2);
     // PKCE code_verifier & code_challenge 생성
     const codeVerifier = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b=>b.toString(16).padStart(2,'0')).join('');
