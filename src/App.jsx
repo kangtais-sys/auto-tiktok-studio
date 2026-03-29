@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 const API_URL = "https://api.anthropic.com/v1/messages";
 const MODEL   = "claude-sonnet-4-20250514";
 const callClaude = async (msgs) => {
-  const r = await fetch(API_URL, { method:"POST", headers:{"Content-Type":"application/json","x-api-key":import.meta.env.VITE_ANTHROPIC_API_KEY,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+  const r = await fetch(API_URL, { method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({ model:MODEL, max_tokens:1000, messages:msgs }) });
   return r.json();
 };
