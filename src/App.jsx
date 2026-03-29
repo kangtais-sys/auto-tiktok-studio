@@ -132,6 +132,7 @@ export default function App() {
       if (data.access_token) {
         localStorage.setItem("tt_token", data.access_token);
         setTiktokToken(data.access_token);
+        fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url", { headers: { "Authorization": "Bearer "+data.access_token } }).then(r=>r.json()).then(u=>{ const name = u?.data?.user?.display_name||""; localStorage.setItem("tt_user", name); setTiktokUser(name); });
         window.history.replaceState({}, "", "/");
       }
     });
