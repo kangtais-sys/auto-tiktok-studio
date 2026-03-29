@@ -57,12 +57,6 @@ const VFX_PRESETS = [
   {id:"float",icon:"💫",label:"제품 플로팅",desc:"제품이 공중에 떠"},
   {id:"matrix",icon:"🟩",label:"매트릭스",desc:"파티클 인트로"},
 ];
-const SERVICES = [
-  {id:"later",name:"Later",desc:"가장 안정적인 공식 API",icon:"L",color:"#FF6B6B",badge:"추천"},
-  {id:"metricool",name:"Metricool",desc:"분석 대시보드 포함",icon:"M",color:"#4F46E5",badge:""},
-  {id:"postfast",name:"PostFast",desc:"개발자 친화적·저렴",icon:"P",color:"#059669",badge:""},
-  {id:"buffer",name:"Buffer",desc:"멀티채널 동시 관리",icon:"B",color:"#6366F1",badge:""},
-];
 const HEYGEN_AVATARS = [
   {id:"aria",name:"Aria",thumb:"👩",style:"K뷰티"},
   {id:"mia",name:"Mia",thumb:"👱‍♀️",style:"글로벌 럭셔리"},
@@ -90,11 +84,6 @@ const INIT_TEMPLATES = [
 
 export default function App() {
   const [tab, setTab] = useState("create");
-  const [accounts, setAccounts] = useState([]);
-  const [showAccModal, setShowAccModal] = useState(false);
-  const [accStep, setAccStep] = useState(1);
-  const [accForm, setAccForm] = useState({service:"later",tiktokUser:"",apiKey:"",email:"",country:"KR"});
-  const [accConnecting, setAccConnecting] = useState(false);
   const [tiktokToken, setTiktokToken] = useState(localStorage.getItem("tt_token")||"");
   const [tiktokUser, setTiktokUser] = useState(localStorage.getItem("tt_user")||"");
   const [tiktokUploading, setTiktokUploading] = useState(false);
@@ -113,6 +102,7 @@ export default function App() {
   const chatRef = useRef(null);
   useEffect(() => { chatRef.current?.scrollTo(0,9999); }, [chatMsgs]);
 
+  // TikTok OAuth Callback 처리
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
@@ -132,11 +122,18 @@ export default function App() {
       if (data.access_token) {
         localStorage.setItem("tt_token", data.access_token);
         setTiktokToken(data.access_token);
-        fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url", { headers: { "Authorization": "Bearer "+data.access_token } }).then(r=>r.json()).then(u=>{ const name = u?.data?.user?.display_name||""; localStorage.setItem("tt_user", name); setTiktokUser(name); });
+        fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url", {
+          headers: { "Authorization": "Bearer "+data.access_token }
+        }).then(r=>r.json()).then(u=>{
+          const name = u?.data?.user?.display_name||"";
+          localStorage.setItem("tt_user", name);
+          setTiktokUser(name);
+        });
         window.history.replaceState({}, "", "/");
       }
     });
   }, []);
+
   const [posts, setPosts] = useState(INIT_POSTS);
   const [newDate, setNewDate] = useState("");
   const [newTime, setNewTime] = useState("09:00");
@@ -169,16 +166,6 @@ export default function App() {
   const [replyText, setReplyText] = useState("");
   const [aiReplying, setAiReplying] = useState(false);
 
-  const openAccModal = () => { setShowAccModal(true); setAccStep(1); setAccForm({service:"later",tiktokUser:"",apiKey:"",email:"",country:"KR"}); };
-  const connectAccount = () => {
-    if (!accForm.apiKey||!accForm.tiktokUser) return;
-    setAccConnecting(true);
-    setTimeout(() => {
-      const svc = SERVICES.find(s=>s.id===accForm.service);
-      setAccounts(p=>[...p,{id:Date.now(),user:accForm.tiktokUser,service:svc?.name||accForm.service,country:accForm.country}]);
-      setAccStep(3); setAccConnecting(false);
-    }, 1400);
-  };
   const generateContent = async () => {
     setStep(2);
     try {
@@ -234,28 +221,18 @@ export default function App() {
       let attempts = 0;
       while (attempts < 36) {
         await new Promise(r=>setTimeout(r,5000));
-        const sr = await fetch("/heygen/v1/video_status.get?video_id="+videoId, {
-          headers: { "X-Api-Key": HEYGEN_KEY }
-        });
+        const sr = await fetch("/heygen/v1/video_status.get?video_id="+videoId, { headers: { "X-Api-Key": HEYGEN_KEY } });
         const sd = await sr.json();
         const status = sd.data?.status;
         setHeygenProgress("렌더링 중... "+Math.min(attempts*8,90)+"%");
         if (status === "completed") {
           setHeygenResult({ avatar:avatar?.name, duration:heygenScript.length>100?"약 30초":"약 15초", videoUrl:sd.data?.video_url, thumbnailUrl:sd.data?.thumbnail_url });
-          setHeygenProgress("");
-          setHeygenGenerating(false);
-          return;
-        } else if (status === "failed") {
-          throw new Error("영상 생성 실패");
-        }
+          setHeygenProgress(""); setHeygenGenerating(false); return;
+        } else if (status === "failed") { throw new Error("영상 생성 실패"); }
         attempts++;
       }
       throw new Error("시간 초과 (3분)");
-    } catch(e) {
-      setHeygenError(e.message||"오류 발생");
-      setHeygenProgress("");
-      setHeygenGenerating(false);
-    }
+    } catch(e) { setHeygenError(e.message||"오류 발생"); setHeygenProgress(""); setHeygenGenerating(false); }
   };
   const simulateHighsfield = () => { setHiggsfieldGenerating(true); setTimeout(()=>{ setHiggsfieldResult({mode:higgsfieldMode==="product"?"제품 광고":"VFX 숏츠"}); setHiggsfieldGenerating(false); },2000); };
   const genAiReply = async () => {
@@ -270,7 +247,6 @@ export default function App() {
     const redirectUri = encodeURIComponent(window.location.origin + "/tiktok-callback");
     const scope = encodeURIComponent("user.info.basic,video.upload,video.list");
     const state = Math.random().toString(36).slice(2);
-    // PKCE code_verifier & code_challenge 생성
     const codeVerifier = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b=>b.toString(16).padStart(2,'0')).join('');
     const encoder = new TextEncoder();
     const data = encoder.encode(codeVerifier);
@@ -281,20 +257,25 @@ export default function App() {
     window.location.href = `https://www.tiktok.com/v2/auth/authorize?client_key=${CLIENT_KEY}&response_type=code&scope=${scope}&redirect_uri=${redirectUri}&state=${state}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
   };
 
+  // TikTok 로그아웃
+  const logoutTikTok = () => {
+    localStorage.removeItem("tt_token");
+    localStorage.removeItem("tt_user");
+    setTiktokToken("");
+    setTiktokUser("");
+  };
+
   // TikTok 영상 업로드
-  const uploadToTikTok = async (videoUrl, caption) => {
+  const uploadToTikTok = async (videoUrl, cap) => {
     if (!tiktokToken) { alert("TikTok 로그인이 필요해요!"); return; }
     if (!videoUrl) { alert("영상 URL이 없어요!"); return; }
-    setTiktokUploading(true);
-    setTiktokUploadError("");
-    setTiktokUploadResult(null);
+    setTiktokUploading(true); setTiktokUploadError(""); setTiktokUploadResult(null);
     try {
-      // 1. 업로드 초기화
       const initRes = await fetch("/tiktok/v2/post/publish/video/init/", {
         method: "POST",
         headers: { "Authorization": "Bearer "+tiktokToken, "Content-Type": "application/json; charset=UTF-8" },
         body: JSON.stringify({
-          post_info: { title: caption||"✨ K-Beauty routine #kbeauty #skincare #millimilli", privacy_level:"SELF_ONLY", disable_duet:false, disable_comment:false, disable_stitch:false },
+          post_info: { title: cap||"✨ K-Beauty routine #kbeauty #skincare #millimilli", privacy_level:"SELF_ONLY", disable_duet:false, disable_comment:false, disable_stitch:false },
           source_info: { source:"PULL_FROM_URL", video_url: videoUrl }
         })
       });
@@ -302,7 +283,6 @@ export default function App() {
       if (initData.error?.code && initData.error.code !== "ok") throw new Error(initData.error.message||"업로드 초기화 실패");
       const publishId = initData.data?.publish_id;
       if (!publishId) throw new Error("publish_id 없음");
-      // 2. 상태 확인
       let attempts = 0;
       while (attempts < 20) {
         await new Promise(r=>setTimeout(r,3000));
@@ -313,20 +293,12 @@ export default function App() {
         });
         const statusData = await statusRes.json();
         const status = statusData.data?.status;
-        if (status === "PUBLISH_COMPLETE") {
-          setTiktokUploadResult({ publishId, status:"✅ TikTok 업로드 완료!" });
-          setTiktokUploading(false);
-          return;
-        } else if (status === "FAILED") {
-          throw new Error("업로드 실패: "+statusData.data?.fail_reason);
-        }
+        if (status === "PUBLISH_COMPLETE") { setTiktokUploadResult({ publishId, status:"✅ TikTok 업로드 완료!" }); setTiktokUploading(false); return; }
+        else if (status === "FAILED") { throw new Error("업로드 실패: "+statusData.data?.fail_reason); }
         attempts++;
       }
       throw new Error("시간 초과");
-    } catch(e) {
-      setTiktokUploadError(e.message||"오류 발생");
-      setTiktokUploading(false);
-    }
+    } catch(e) { setTiktokUploadError(e.message||"오류 발생"); setTiktokUploading(false); }
   };
 
   const S = {
@@ -360,7 +332,6 @@ export default function App() {
     chip: (t)=>({display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:12,fontWeight:500,margin:2,background:t==="pink"?"#FFF0F5":"#F5F5F2",color:t==="pink"?"#C4267D":"#555"}),
     toggle: (on)=>({width:42,height:23,borderRadius:12,background:on?"#111":"#DDDDD8",position:"relative",cursor:"pointer",flexShrink:0,border:"none"}),
     knob: (on)=>({width:17,height:17,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:on?22:3,transition:"left .2s"}),
-    accPill: {display:"flex",alignItems:"center",gap:7,padding:"6px 13px",borderRadius:20,background:"#F5F5F2",fontSize:12,fontWeight:500,color:"#555"},
     dot: {width:7,height:7,borderRadius:"50%",background:"#059669",flexShrink:0,display:"inline-block"},
   };
 
@@ -383,19 +354,17 @@ export default function App() {
       <div style={S.nav}>
         <span style={S.logo}>AUTO TIKTOK STUDIO</span>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={S.accPill}>
-            <span style={S.dot} />
-            @{accounts[0]?.user} · {accounts[0]?.service}
-            {accounts.length > 1 && <span style={{color:"#999"}}> +{accounts.length-1}</span>}
-          </div>
           {tiktokToken ? (
-            <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:20,background:"#111",fontSize:12,fontWeight:600,color:"#fff"}}>
-              <span style={{fontSize:10}}>▶</span> @{tiktokUser||"TikTok 연결됨"}
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:7,padding:"6px 14px",borderRadius:20,background:"#111",fontSize:12,fontWeight:600,color:"#fff"}}>
+                <span style={{width:7,height:7,borderRadius:"50%",background:"#4ade80",display:"inline-block",flexShrink:0}} />
+                @{tiktokUser||"TikTok 연결됨"}
+              </div>
+              <button style={{...S.btnOut,...S.btnSm,color:"#DC2626",borderColor:"#FCA5A5",fontSize:11}} onClick={logoutTikTok}>로그아웃</button>
             </div>
           ) : (
             <button style={{...S.btnBlack,...S.btnSm}} onClick={loginTikTok}>🔗 TikTok 연결</button>
           )}
-          <button style={{...S.btnOut,...S.btnSm}} onClick={openAccModal}>+ 계정 추가</button>
         </div>
       </div>
 
@@ -438,6 +407,14 @@ export default function App() {
             {TABS.find(t=>t.id===tab)?.guide}
           </div>
         </div>
+
+        {/* TikTok 미연결 배너 */}
+        {!tiktokToken && (
+          <div style={{padding:"12px 16px",background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:10,marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div style={{fontSize:13,color:"#92400E"}}>🔗 TikTok 계정을 연결하면 영상을 바로 업로드할 수 있어요!</div>
+            <button style={{...S.btnBlack,...S.btnSm,background:"#EA4C89"}} onClick={loginTikTok}>TikTok 연결하기</button>
+          </div>
+        )}
 
         {/* ══ 콘텐츠 생성 ══ */}
         {tab==="create" && (
@@ -578,23 +555,15 @@ export default function App() {
                     <div style={{height:4,borderRadius:99,background:"#C4267D",width:heygenProgress.includes("%")?heygenProgress.split("%")[0].split(" ").pop()+"%":"20%",transition:"width .5s"}} />
                   </div>
                 )}
-                {heygenError && (
-                  <div style={{marginTop:12,padding:"10px 14px",background:"#FEF2F2",borderRadius:9,fontSize:12,color:"#DC2626"}}>
-                    ⚠ {heygenError}
-                  </div>
-                )}
+                {heygenError && <div style={{marginTop:12,padding:"10px 14px",background:"#FEF2F2",borderRadius:9,fontSize:12,color:"#DC2626"}}>⚠ {heygenError}</div>}
                 {heygenResult && (
                   <div style={{marginTop:14,padding:14,background:"#EDFDF4",border:"1px solid #6EE7B7",borderRadius:10}}>
                     <div style={{fontSize:13,fontWeight:600,color:"#059669",marginBottom:10}}>✓ 영상 생성 완료!</div>
-                    {heygenResult.thumbnailUrl && (
-                      <img src={heygenResult.thumbnailUrl} style={{width:"100%",borderRadius:8,marginBottom:10}} alt="thumbnail" />
-                    )}
+                    {heygenResult.thumbnailUrl && <img src={heygenResult.thumbnailUrl} style={{width:"100%",borderRadius:8,marginBottom:10}} alt="thumbnail" />}
                     <div style={{fontSize:12,color:"#555",marginBottom:10}}>{heygenResult.avatar} · {heygenResult.duration}</div>
                     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                       <button style={{...S.btnBlack,...S.btnSm,flex:1,justifyContent:"center"}} onClick={()=>setTab("schedule")}>📅 예약하기</button>
-                      {heygenResult.videoUrl && (
-                        <a href={heygenResult.videoUrl} target="_blank" rel="noreferrer" style={{...S.btnOut,...S.btnSm}}>⬇ 다운로드</a>
-                      )}
+                      {heygenResult.videoUrl && <a href={heygenResult.videoUrl} target="_blank" rel="noreferrer" style={{...S.btnOut,...S.btnSm}}>⬇ 다운로드</a>}
                     </div>
                     {heygenResult.videoUrl && (
                       <div style={{marginTop:10}}>
@@ -1007,108 +976,6 @@ export default function App() {
         )}
 
       </div>
-
-      {/* ══ 계정 연동 모달 ══ */}
-      {showAccModal && (
-        <div onClick={e=>{if(e.target===e.currentTarget)setShowAccModal(false);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-          <div style={{background:"#fff",borderRadius:16,width:"100%",maxWidth:480,boxShadow:"0 20px 60px rgba(0,0,0,.2)",overflow:"hidden"}}>
-            <div style={{padding:"18px 22px",borderBottom:"1px solid #E8E8E4",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div>
-                <div style={{fontWeight:700,fontSize:15,color:"#111"}}>TikTok 계정 연결</div>
-                <div style={{fontSize:12,color:"#999",marginTop:2}}>
-                  {accStep===1?"서비스 선택":accStep===2?"정보 입력":"완료!"}
-                </div>
-              </div>
-              <button style={{fontSize:18,color:"#999",cursor:"pointer",border:"none",background:"none"}} onClick={()=>setShowAccModal(false)}>✕</button>
-            </div>
-            <div style={{padding:22}}>
-              {accStep===1 && (
-                <div>
-                  <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
-                    {SERVICES.map(svc=>(
-                      <div key={svc.id} onClick={()=>setAccForm(p=>({...p,service:svc.id}))} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",borderRadius:12,border:"1.5px solid "+(accForm.service===svc.id?"#111":"#E8E8E4"),cursor:"pointer",background:accForm.service===svc.id?"#111":"#fff"}}>
-                        <div style={{width:38,height:38,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:15,color:accForm.service===svc.id?"#fff":svc.color,flexShrink:0,background:accForm.service===svc.id?"rgba(255,255,255,.15)":svc.color+"22"}}>
-                          {svc.icon}
-                        </div>
-                        <div style={{flex:1}}>
-                          <div style={{fontWeight:600,fontSize:14,color:accForm.service===svc.id?"#fff":"#111"}}>
-                            {svc.name}{svc.badge&&<span style={{marginLeft:8,padding:"1px 7px",borderRadius:20,fontSize:10,background:"#EDFDF4",color:"#059669"}}>{svc.badge}</span>}
-                          </div>
-                          <div style={{fontSize:12,color:accForm.service===svc.id?"rgba(255,255,255,.6)":"#999",marginTop:2}}>{svc.desc}</div>
-                        </div>
-                        {accForm.service===svc.id&&<div style={{color:"#fff",fontSize:16}}>✓</div>}
-                      </div>
-                    ))}
-                  </div>
-                  <button style={{...S.btnBlack,width:"100%",justifyContent:"center"}} onClick={()=>setAccStep(2)}>다음 →</button>
-                </div>
-              )}
-              {accStep===2 && (
-                <div>
-                  <div style={{marginBottom:14}}>
-                    <div style={S.lbl}>TikTok 계정 이름</div>
-                    <div style={{position:"relative"}}>
-                      <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"#AAA"}}>@</span>
-                      <input style={{...S.inp,paddingLeft:26}} value={accForm.tiktokUser} onChange={e=>setAccForm(p=>({...p,tiktokUser:e.target.value.replace("@","")}))} placeholder="your_tiktok_username" />
-                    </div>
-                  </div>
-                  <div style={{marginBottom:14}}>
-                    <div style={S.lbl}>{SERVICES.find(s=>s.id===accForm.service)?.name} API 키</div>
-                    <input type="password" style={S.inp} value={accForm.apiKey} onChange={e=>setAccForm(p=>({...p,apiKey:e.target.value}))} placeholder="API 키를 붙여넣으세요" />
-                  </div>
-                  <div style={{marginBottom:14}}>
-                    <div style={S.lbl}>이메일 (선택)</div>
-                    <input type="email" style={S.inp} value={accForm.email} onChange={e=>setAccForm(p=>({...p,email:e.target.value}))} placeholder="tiktok@email.com" />
-                  </div>
-                  <div style={{marginBottom:20}}>
-                    <div style={S.lbl}>주 타겟 국가</div>
-                    <select style={S.inp} value={accForm.country} onChange={e=>setAccForm(p=>({...p,country:e.target.value}))}>
-                      {LANGS.map(l=><option key={l.country} value={l.country}>{l.flag} {l.label}</option>)}
-                    </select>
-                  </div>
-                  <div style={{display:"flex",gap:8}}>
-                    <button style={{...S.btnOut,padding:"11px 16px",borderRadius:9}} onClick={()=>setAccStep(1)}>← 이전</button>
-                    <button style={{...S.btnBlack,flex:1,justifyContent:"center",opacity:(!accForm.apiKey||!accForm.tiktokUser)?0.4:1}} onClick={connectAccount} disabled={accConnecting||!accForm.apiKey||!accForm.tiktokUser}>
-                      {accConnecting?"연결 중...":"TikTok 계정 연결"}
-                    </button>
-                  </div>
-                </div>
-              )}
-              {accStep===3 && (
-                <div style={{textAlign:"center",padding:"10px 0 16px"}}>
-                  <div style={{width:60,height:60,borderRadius:"50%",background:"#EDFDF4",margin:"0 auto 14px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:26}}>✓</div>
-                  <div style={{fontWeight:700,fontSize:16,color:"#111",marginBottom:6}}>연결 완료!</div>
-                  <div style={{fontSize:13,color:"#888",marginBottom:20}}>@{accForm.tiktokUser} · {SERVICES.find(s=>s.id===accForm.service)?.name}</div>
-                  <div style={{display:"flex",gap:8}}>
-                    <button style={{...S.btnOut,flex:1,padding:"11px",borderRadius:9,justifyContent:"center"}} onClick={()=>{setAccStep(1);setAccForm({service:"later",tiktokUser:"",apiKey:"",email:"",country:"KR"});}}>+ 계정 추가</button>
-                    <button style={{...S.btnBlack,flex:1,justifyContent:"center",padding:"11px"}} onClick={()=>setShowAccModal(false)}>완료</button>
-                  </div>
-                </div>
-              )}
-              {accounts.length>0&&accStep!==3&&(
-                <div style={{marginTop:20,paddingTop:16,borderTop:"1px solid #E8E8E4"}}>
-                  <div style={{fontSize:12,fontWeight:600,color:"#888",marginBottom:10}}>연결된 계정 ({accounts.length})</div>
-                  {accounts.map(a=>(
-                    <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #F5F5F2"}}>
-                      <div style={{width:30,height:30,borderRadius:"50%",background:"#111",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>
-                        {a.user.slice(0,2).toUpperCase()}
-                      </div>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:13,fontWeight:500,color:"#111"}}>@{a.user}</div>
-                        <div style={{fontSize:11,color:"#AAA"}}>{a.service} · {FLAG[a.country]}</div>
-                      </div>
-                      <div style={{width:6,height:6,borderRadius:"50%",background:"#059669"}} />
-                      <span style={{fontSize:11,color:"#059669"}}>연결됨</span>
-                      {a.id!==0&&<button style={{fontSize:11,color:"#DC2626",background:"none",border:"none",cursor:"pointer"}} onClick={()=>setAccounts(prev=>prev.filter(x=>x.id!==a.id))}>해제</button>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }
