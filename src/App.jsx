@@ -1,61 +1,55 @@
 import { useState, useRef, useEffect } from "react";
 
+// ── API ──────────────────────────────────────────────────────────
 const API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL   = "claude-sonnet-4-20250514";
-const callClaude = async (msgs) => {
-  const r = await fetch(API_URL, { method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ model:MODEL, max_tokens:1000, messages:msgs }) });
+const MODEL = "claude-sonnet-4-20250514";
+const callClaude = async (msgs, system = "") => {
+  const body = { model: MODEL, max_tokens: 1200, messages: msgs };
+  if (system) body.system = system;
+  const r = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify(body),
+  });
   return r.json();
 };
-const extractText = (data) => (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
+const extractText = (data) =>
+  (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
 
+// ── CONSTANTS ────────────────────────────────────────────────────
 const FLAG = { KR:"🇰🇷",US:"🇺🇸",JP:"🇯🇵",TH:"🇹🇭",ID:"🇮🇩",VN:"🇻🇳",BR:"🇧🇷",MY:"🇲🇾",SA:"🇸🇦",TW:"🇹🇼",FR:"🇫🇷",MX:"🇲🇽" };
-const LANGS = [
-  {code:"ko",flag:"🇰🇷",label:"한국어",country:"KR"},{code:"en",flag:"🇺🇸",label:"영어",country:"US"},
-  {code:"ja",flag:"🇯🇵",label:"일본어",country:"JP"},{code:"th",flag:"🇹🇭",label:"태국어",country:"TH"},
-  {code:"id",flag:"🇮🇩",label:"인도네시아어",country:"ID"},{code:"vi",flag:"🇻🇳",label:"베트남어",country:"VN"},
-  {code:"pt",flag:"🇧🇷",label:"포르투갈어",country:"BR"},{code:"ms",flag:"🇲🇾",label:"말레이어",country:"MY"},
-  {code:"ar",flag:"🇸🇦",label:"아랍어",country:"SA"},{code:"zh",flag:"🇹🇼",label:"중국어",country:"TW"},
-  {code:"fr",flag:"🇫🇷",label:"프랑스어",country:"FR"},{code:"es",flag:"🇲🇽",label:"스페인어",country:"MX"},
-];
-const TABS = [
-  {id:"style",   num:"01", label:"AI 스타일",    icon:"✦", guide:"버추얼 인플루언서 캐릭터를 먼저 설정하세요. 말투·무드·컨셉이 모든 콘텐츠에 자동 적용돼요."},
-  {id:"create",  num:"02", label:"콘텐츠 생성",  icon:"⚡", guide:"참조 영상 URL을 붙여넣으면 AI가 훅·스크립트·자막·해시태그를 자동으로 만들어줘요."},
-  {id:"video",   num:"03", label:"영상 제작",    icon:"🎬", guide:"HeyGen으로 아바타 영상을 만들고, Higgsfield로 제품 광고 & VFX 숏츠를 제작해요."},
-  {id:"schedule",num:"04", label:"콘텐츠 예약",  icon:"📅", guide:"만들어진 콘텐츠를 원하는 날짜·시간·국가에 예약하세요. 최적 시간대를 자동으로 추천해줘요."},
-  {id:"manage",  num:"05", label:"콘텐츠 관리",  icon:"📋", guide:"예약·게시된 콘텐츠를 한눈에 보고 편집·삭제·상태 변경을 할 수 있어요."},
-  {id:"perf",    num:"06", label:"성과 분석",    icon:"📊", guide:"조회수·좋아요·팔로워 성장을 확인하고, AI 인사이트로 다음 콘텐츠 전략을 세워요."},
-  {id:"comments",num:"07", label:"댓글 관리",    icon:"💬", guide:"판매 문의 댓글을 놓치지 말고, AI 자동 답글로 골든타임을 잡으세요."},
-];
-const FLOW_STEPS = [
-  {id:"style",  label:"스타일 설정"},
-  {id:"create", label:"콘텐츠 생성"},
-  {id:"video",  label:"영상 제작"},
-  {id:"schedule",label:"예약"},
-  {id:"manage", label:"관리"},
-  {id:"perf",   label:"성과 확인"},
-  {id:"comments",label:"댓글 대응"},
+const NAV = [
+  { id:"style",   icon:"✦", label:"AI 스타일" },
+  { id:"create",  icon:"⚡", label:"콘텐츠 생성" },
+  { id:"video",   icon:"🎬", label:"영상 제작" },
+  { id:"schedule",icon:"📅", label:"콘텐츠 예약" },
+  { id:"manage",  icon:"📋", label:"콘텐츠 관리" },
+  { id:"perf",    icon:"📊", label:"성과 분석" },
+  { id:"comments",icon:"💬", label:"댓글 관리" },
 ];
 const PRESETS = [
-  {id:"kbeauty",label:"K-뷰티 글로우",icon:"✨",vibe:"청순·맑은 피부",desc:"밝고 친근한 언니"},
-  {id:"luxury",label:"럭셔리 스킨",icon:"💎",vibe:"고급스럽고 세련",desc:"프리미엄 감성"},
-  {id:"viral",label:"바이럴 퀸",icon:"🔥",vibe:"강렬·임팩트",desc:"3초 훅 특화"},
-  {id:"calm",label:"젠 뷰티",icon:"🌿",vibe:"자연·미니멀",desc:"차분한 신뢰감"},
-  {id:"funny",label:"코믹 뷰티",icon:"😂",vibe:"유머·발랄",desc:"웃기고 공감"},
-  {id:"edu",label:"뷰티 교수",icon:"📚",vibe:"전문·교육",desc:"성분·이론 설명"},
+  {id:"kbeauty",label:"K-뷰티 글로우",icon:"✨",vibe:"청순·맑은 피부",speech:"친근한 언니",concept:"K뷰티 글로우",age:"24",lang:"한국어"},
+  {id:"luxury",label:"럭셔리 스킨",icon:"💎",vibe:"고급스럽고 세련",speech:"차분하고 전문적",concept:"프리미엄 스킨케어",age:"28",lang:"한국어/영어"},
+  {id:"viral",label:"바이럴 퀸",icon:"🔥",vibe:"강렬·임팩트",speech:"빠르고 강렬하게",concept:"3초 훅 특화",age:"22",lang:"한국어"},
+  {id:"calm",label:"젠 뷰티",icon:"🌿",vibe:"자연·미니멀",speech:"차분하고 신뢰감",concept:"클린뷰티",age:"26",lang:"한국어"},
+  {id:"funny",label:"코믹 뷰티",icon:"😂",vibe:"유머·발랄",speech:"웃기고 공감",concept:"리얼 뷰티",age:"23",lang:"한국어"},
+  {id:"global",label:"글로벌 뷰티",icon:"🌍",vibe:"세련·글로벌",speech:"영어+한국어 믹스",concept:"K뷰티 해외 수출",age:"25",lang:"영어/한국어"},
 ];
 const PERF_DATA = {
-  "7d":  {views:"284K",likes:"18.2K",comments:"2,140",followers:"+892",top:"전후 변신"},
-  "30d": {views:"1.2M",likes:"74K",comments:"8,900",followers:"+3.4K",top:"성분 설명"},
-  "90d": {views:"3.8M",likes:"230K",comments:"27K",followers:"+11K",top:"루틴 소개"},
+  "7d": {views:"284K",likes:"18.2K",comments:"2,140",followers:"+892",top:"전후 변신"},
+  "30d":{views:"1.2M",likes:"74K",comments:"8,900",followers:"+3.4K",top:"성분 설명"},
+  "90d":{views:"3.8M",likes:"230K",comments:"27K",followers:"+11K",top:"루틴 소개"},
 };
 const STATUS_L = {published:"게시됨",scheduled:"예약됨",draft:"초안",failed:"실패"};
-const STATUS_C = {published:"#059669",scheduled:"#4F46E5",draft:"#999",failed:"#EF4444"};
+const STATUS_C = {published:"#059669",scheduled:"#8435F3",draft:"#9CA3AF",failed:"#E11D48"};
 const VFX_PRESETS = [
-  {id:"glow",icon:"✨",label:"글로우 스킨",desc:"피부가 빛나는 효과"},
-  {id:"ba",icon:"↔",label:"전후 변환",desc:"드라마틱 비교"},
-  {id:"float",icon:"💫",label:"제품 플로팅",desc:"제품이 공중에 떠"},
-  {id:"matrix",icon:"🟩",label:"매트릭스",desc:"파티클 인트로"},
+  {id:"glow",icon:"✨",label:"글로우 스킨"},{id:"ba",icon:"↔",label:"전후 변환"},
+  {id:"float",icon:"💫",label:"제품 플로팅"},{id:"matrix",icon:"🟩",label:"매트릭스"},
 ];
 const HEYGEN_AVATARS = [
   {id:"aria",name:"Aria",thumb:"👩",style:"K뷰티"},
@@ -75,90 +69,71 @@ const INIT_COMMENTS = [
   {id:4,user:"@troll123",text:"광고인 거 티 나잖아요",type:"negative",status:"hidden",replied:false,post:"신제품 리뷰"},
 ];
 const INIT_TEMPLATES = [
-  {id:1,label:"감사 KR",lang:"ko",type:"thanks",text:"감사해요 💕 @millimilli_official 에서 더 확인해보세요!"},
-  {id:2,label:"감사 EN",lang:"en",type:"thanks",text:"Thank you so much! 💕 Check @millimilli_official for more!"},
-  {id:3,label:"쇼핑 KR",lang:"ko",type:"shopping",text:"구매는 bio 링크에서! 지금 한정 할인 중 🎁"},
-  {id:4,label:"쇼핑 EN",lang:"en",type:"shopping",text:"Purchase through the link in bio! Limited discount now 🎁"},
-  {id:5,label:"부정 대응",lang:"ko",type:"negative",text:"소중한 의견 감사해요. DM으로 이야기 나눠요 😊"},
+  {id:1,label:"감사 KR",text:"감사해요 💕 @millimilli_official 에서 더 확인해보세요!"},
+  {id:2,label:"감사 EN",text:"Thank you so much! 💕 Check @millimilli_official for more!"},
+  {id:3,label:"쇼핑 KR",text:"구매는 bio 링크에서! 지금 한정 할인 중 🎁"},
+  {id:4,label:"부정 대응",text:"소중한 의견 감사해요. DM으로 이야기 나눠요 😊"},
 ];
 
+// ── MAIN ─────────────────────────────────────────────────────────
 export default function App() {
-  const [tab, setTab] = useState("create");
+  const [tab, setTab] = useState("style");
+
+  // TikTok
   const [tiktokToken, setTiktokToken] = useState(localStorage.getItem("tt_token")||"");
   const [tiktokUser, setTiktokUser] = useState(localStorage.getItem("tt_user")||"");
   const [tiktokUploading, setTiktokUploading] = useState(false);
   const [tiktokUploadResult, setTiktokUploadResult] = useState(null);
   const [tiktokUploadError, setTiktokUploadError] = useState("");
+
+  // Style tab
+  const [persona, setPersona] = useState({name:"MILLI",age:"24",lang:"한국어",vibe:"청순·글로우",speech:"친근한 언니",concept:"K뷰티 글로우"});
+  const [personaSaved, setPersonaSaved] = useState(false);
+  const [chatMsgs, setChatMsgs] = useState([{role:"ai",text:"안녕하세요! 어떤 버추얼 인플루언서를 만들고 싶으세요? 예: '20대 K뷰티 언니, 발랄하고 친근하게'"}]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [refUrl, setRefUrl] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [refAnalysis, setRefAnalysis] = useState(null);
+  const chatRef = useRef(null);
+  useEffect(() => { chatRef.current?.scrollTo(0,9999); }, [chatMsgs]);
+
+  // Content
   const [step, setStep] = useState(1);
   const [srcUrl, setSrcUrl] = useState("");
   const [gen, setGen] = useState(null);
   const [caption, setCaption] = useState("");
-  const [preset, setPreset] = useState(null);
-  const [persona, setPersona] = useState({name:"MILLI",country:"KR",age:"24",vibe:"청순·글로우",speech:"친근한 언니",concept:"K뷰티 글로우"});
-  const [chatMsgs, setChatMsgs] = useState([{role:"ai",text:"안녕! 캐릭터 이름을 정해줘 😊"}]);
-  const [chatInput, setChatInput] = useState("");
-  const [refUrl, setRefUrl] = useState("");
-  const [analyzing, setAnalyzing] = useState(false);
-  const chatRef = useRef(null);
-  useEffect(() => { chatRef.current?.scrollTo(0,9999); }, [chatMsgs]);
 
-  // TikTok OAuth Callback 처리
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    const state = params.get("state");
-    if (!code) return;
-    const savedState = sessionStorage.getItem("tt_state");
-    if (state !== savedState) return;
-    const CLIENT_KEY = import.meta.env.VITE_TIKTOK_CLIENT_KEY;
-    const CLIENT_SECRET = import.meta.env.VITE_TIKTOK_CLIENT_SECRET;
-    const codeVerifier = sessionStorage.getItem("tt_code_verifier");
-    const redirectUri = window.location.origin + "/tiktok-callback";
-    fetch("https://open.tiktokapis.com/v2/oauth/token/", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ client_key: CLIENT_KEY, client_secret: CLIENT_SECRET, code, grant_type: "authorization_code", redirect_uri: redirectUri, code_verifier: codeVerifier })
-    }).then(r=>r.json()).then(data=>{
-      if (data.access_token) {
-        localStorage.setItem("tt_token", data.access_token);
-        setTiktokToken(data.access_token);
-        fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url", {
-          headers: { "Authorization": "Bearer "+data.access_token }
-        }).then(r=>r.json()).then(u=>{
-          const name = u?.data?.user?.display_name||"";
-          localStorage.setItem("tt_user", name);
-          setTiktokUser(name);
-        });
-        window.history.replaceState({}, "", "/");
-      }
-    });
-  }, []);
-
-  const [posts, setPosts] = useState(INIT_POSTS);
-  const [newDate, setNewDate] = useState("");
-  const [newTime, setNewTime] = useState("09:00");
-  const [newCountry, setNewCountry] = useState("KR");
-  const [postTextOpen, setPostTextOpen] = useState(false);
-  const [postText, setPostText] = useState({caption:"",hashtags:""});
-  const [schedOk, setSchedOk] = useState(false);
-  const [calYear, setCalYear] = useState(new Date().getFullYear());
-  const [calMonth, setCalMonth] = useState(new Date().getMonth());
-  const [mgmtFilter, setMgmtFilter] = useState("all");
-  const [editingId, setEditingId] = useState(null);
-  const [period, setPeriod] = useState("7d");
-  const [heygenKey, setHeygenKey] = useState("");
-  const [higgsfieldKey, setHiggsfieldKey] = useState("");
+  // Video
   const [selectedAvatar, setSelectedAvatar] = useState("aria");
   const [heygenScript, setHeygenScript] = useState("");
   const [heygenGenerating, setHeygenGenerating] = useState(false);
   const [heygenResult, setHeygenResult] = useState(null);
-  const [heygenError, setHeygenError] = useState(""); 
+  const [heygenError, setHeygenError] = useState("");
   const [heygenProgress, setHeygenProgress] = useState("");
   const [higgsfieldMode, setHiggsfieldMode] = useState("product");
   const [selectedVFX, setSelectedVFX] = useState("glow");
   const [productUrl, setProductUrl] = useState("");
   const [higgsfieldGenerating, setHiggsfieldGenerating] = useState(false);
   const [higgsfieldResult, setHiggsfieldResult] = useState(null);
+
+  // Schedule
+  const [posts, setPosts] = useState(INIT_POSTS);
+  const [newDate, setNewDate] = useState("");
+  const [newTime, setNewTime] = useState("09:00");
+  const [newCountry, setNewCountry] = useState("KR");
+  const [schedOk, setSchedOk] = useState(false);
+  const [calYear, setCalYear] = useState(new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(new Date().getMonth());
+
+  // Manage
+  const [mgmtFilter, setMgmtFilter] = useState("all");
+  const [editingId, setEditingId] = useState(null);
+
+  // Perf
+  const [period, setPeriod] = useState("7d");
+
+  // Comments
   const [comments, setComments] = useState(INIT_COMMENTS);
   const [templates] = useState(INIT_TEMPLATES);
   const [auto, setAuto] = useState({simple:true,negative:true,sales:true});
@@ -166,432 +141,546 @@ export default function App() {
   const [replyText, setReplyText] = useState("");
   const [aiReplying, setAiReplying] = useState(false);
 
+  // TikTok OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const state = params.get("state");
+    if (!code) return;
+    if (state !== sessionStorage.getItem("tt_state")) return;
+    const CLIENT_KEY = import.meta.env.VITE_TIKTOK_CLIENT_KEY;
+    const CLIENT_SECRET = import.meta.env.VITE_TIKTOK_CLIENT_SECRET;
+    const codeVerifier = sessionStorage.getItem("tt_code_verifier");
+    fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+      method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
+      body: new URLSearchParams({client_key:CLIENT_KEY,client_secret:CLIENT_SECRET,code,grant_type:"authorization_code",redirect_uri:window.location.origin+"/tiktok-callback",code_verifier:codeVerifier})
+    }).then(r=>r.json()).then(data=>{
+      if (data.access_token) {
+        localStorage.setItem("tt_token",data.access_token); setTiktokToken(data.access_token);
+        fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url",{headers:{"Authorization":"Bearer "+data.access_token}})
+          .then(r=>r.json()).then(u=>{ const n=u?.data?.user?.display_name||""; localStorage.setItem("tt_user",n); setTiktokUser(n); });
+        window.history.replaceState({},"","/");
+      }
+    });
+  }, []);
+
+  const loginTikTok = async () => {
+    const CLIENT_KEY = import.meta.env.VITE_TIKTOK_CLIENT_KEY;
+    const redirectUri = encodeURIComponent(window.location.origin+"/tiktok-callback");
+    const scope = encodeURIComponent("user.info.basic,video.upload,video.list");
+    const state = Math.random().toString(36).slice(2);
+    const codeVerifier = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b=>b.toString(16).padStart(2,'0')).join('');
+    const digest = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(codeVerifier));
+    const codeChallenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+    sessionStorage.setItem("tt_state",state); sessionStorage.setItem("tt_code_verifier",codeVerifier);
+    window.location.href=`https://www.tiktok.com/v2/auth/authorize?client_key=${CLIENT_KEY}&response_type=code&scope=${scope}&redirect_uri=${redirectUri}&state=${state}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
+  };
+  const logoutTikTok = () => { localStorage.removeItem("tt_token"); localStorage.removeItem("tt_user"); setTiktokToken(""); setTiktokUser(""); };
+
+  const sendChat = async () => {
+    if (!chatInput.trim() || chatLoading) return;
+    const msg = chatInput; setChatInput(""); setChatLoading(true);
+    setChatMsgs(p=>[...p,{role:"user",text:msg}]);
+    try {
+      const data = await callClaude(
+        [{role:"user",content:msg}],
+        `당신은 K뷰티 버추얼 인플루언서 캐릭터 디자이너입니다. 사용자의 요청을 분석해서 캐릭터를 제안하세요.
+반드시 아래 JSON 블록을 포함한 짧은 응답을 하세요:
+\`\`\`json
+{"name":"캐릭터이름","age":"나이","lang":"주요언어","vibe":"분위기/무드","speech":"말투스타일","concept":"컨셉한줄설명"}
+\`\`\`
+JSON 앞뒤로 1-2줄 짧은 코멘트만 추가하세요. 길게 쓰지 마세요.`
+      );
+      const reply = extractText(data);
+      const jsonMatch = reply.match(/```json\n?([\s\S]*?)\n?```/);
+      let suggestion = null;
+      if (jsonMatch) {
+        try { suggestion = JSON.parse(jsonMatch[1]); } catch {}
+      }
+      const cleanText = reply.replace(/```json[\s\S]*?```/g, "").trim();
+      setChatMsgs(p=>[...p,{role:"ai",text:cleanText,suggestion}]);
+    } catch { setChatMsgs(p=>[...p,{role:"ai",text:"오류가 발생했어요. 다시 시도해주세요."}]); }
+    setChatLoading(false);
+  };
+
+  const analyzeRef = async () => {
+    if (!refUrl.trim()) return;
+    setAnalyzing(true); setRefAnalysis(null);
+    try {
+      const handle = refUrl.replace("https://www.tiktok.com/@","").replace("@","").split("/")[0] || refUrl;
+      const data = await callClaude(
+        [{role:"user",content:`TikTok 계정 @${handle} 을 분석해주세요`}],
+        `K뷰티 TikTok 계정 스타일 분석가입니다. 계정명을 보고 해당 계정의 예상 스타일을 분석하고 유사 스타일 3가지를 추천하세요.
+반드시 아래 JSON만 응답하세요:
+{"account":"@${handle}","summary":"계정 스타일 한줄 요약","suggestions":[{"label":"스타일명","desc":"설명","persona":{"name":"이름","vibe":"무드","speech":"말투","concept":"컨셉"}},{"label":"스타일명2","desc":"설명2","persona":{"name":"이름2","vibe":"무드2","speech":"말투2","concept":"컨셉2"}},{"label":"스타일명3","desc":"설명3","persona":{"name":"이름3","vibe":"무드3","speech":"말투3","concept":"컨셉3"}}]}`
+      );
+      const txt = extractText(data).replace(/```json|```/g,"").trim();
+      const m = txt.match(/\{[\s\S]*\}/);
+      if (m) setRefAnalysis(JSON.parse(m[0]));
+    } catch {}
+    setAnalyzing(false);
+  };
+
   const generateContent = async () => {
     setStep(2);
     try {
-      const data = await callClaude([{role:"user",content:"K뷰티 TikTok 콘텐츠 만들어줘. URL: "+srcUrl+". JSON으로만: {hook,script,captions:[3개],hashtags:[8개],duration,cta}"}]);
+      const data = await callClaude([{role:"user",content:`K뷰티 TikTok 콘텐츠. URL: ${srcUrl}. 캐릭터: ${persona.concept}, 말투: ${persona.speech}. JSON만: {"hook":"","script":"","captions":["","",""],"hashtags":["","","","","","","",""],"duration":30,"cta":""}`}]);
       const txt = extractText(data).replace(/```json|```/g,"").trim();
       const m = txt.match(/\{[\s\S]*\}/);
       const parsed = m ? JSON.parse(m[0]) : null;
       if (parsed) { setGen(parsed); setCaption(parsed.captions?.[0]||""); setStep(3); } else setStep(1);
     } catch { setStep(1); }
   };
-  const sendChat = async () => {
-    if (!chatInput.trim()) return;
-    const msg = chatInput; setChatInput("");
-    setChatMsgs(p=>[...p,{role:"user",text:msg}]);
-    try {
-      const data = await callClaude([{role:"user",content:"K뷰티 버추얼 인플루언서 캐릭터 빌더. 친근하게 대화해. 메시지: \""+msg+"\". 캐릭터 완성이면 JSON {name,vibe,speech,concept} 포함"}]);
-      const reply = extractText(data);
-      setChatMsgs(p=>[...p,{role:"ai",text:reply}]);
-    } catch {}
-  };
-  const calDays = () => ({ first:new Date(calYear,calMonth,1).getDay(), total:new Date(calYear,calMonth+1,0).getDate() });
-  const postsOnDay = (d) => posts.filter(p=>{ const dt=new Date(p.date); return dt.getDate()===d&&dt.getMonth()===calMonth&&dt.getFullYear()===calYear; });
-  const addSchedule = () => {
-    if (!newDate) return;
-    setPosts(p=>[...p,{id:Date.now(),title:gen?.hook?.slice(0,40)||"새 콘텐츠",date:newDate,time:newTime,country:newCountry,status:"scheduled",thumb:"📅"}]);
-    setSchedOk(true); setTimeout(()=>setSchedOk(false),3000);
-  };
+
   const simulateHeygen = async () => {
     if (!heygenScript.trim()) return;
-    setHeygenGenerating(true);
-    setHeygenResult(null);
-    setHeygenError("");
-    setHeygenProgress("영상 생성 요청 중...");
+    setHeygenGenerating(true); setHeygenResult(null); setHeygenError(""); setHeygenProgress("영상 생성 요청 중...");
     const HEYGEN_KEY = import.meta.env.VITE_HEYGEN_API_KEY;
-    const avatar = HEYGEN_AVATARS.find(a=>a.id===selectedAvatar);
     try {
-      const res = await fetch("/heygen/v2/video/generate", {
-        method: "POST",
-        headers: { "X-Api-Key": HEYGEN_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          video_inputs: [{
-            character: { type:"avatar", avatar_id: selectedAvatar==="aria"?"Abigail_expressive_2024112501":selectedAvatar==="mia"?"Abigail_standing_office_front":"Abigail_sitting_sofa_front", avatar_style:"normal" },
-            voice: { type:"text", input_text: heygenScript, voice_id:"1bd001e7e50f421d891986aad5158bc8" },
-          }],
-          dimension: { width:720, height:1280 },
-        })
-      });
+      const res = await fetch("/heygen/v2/video/generate",{method:"POST",headers:{"X-Api-Key":HEYGEN_KEY,"Content-Type":"application/json"},
+        body:JSON.stringify({video_inputs:[{character:{type:"avatar",avatar_id:"Abigail_expressive_2024112501",avatar_style:"normal"},voice:{type:"text",input_text:heygenScript,voice_id:"1bd001e7e50f421d891986aad5158bc8"}}],dimension:{width:720,height:1280}})});
       const data = await res.json();
       if (data.error) throw new Error(data.error.message||"생성 실패");
       const videoId = data.data?.video_id;
       if (!videoId) throw new Error("video_id 없음");
-      setHeygenProgress("렌더링 중... (1~3분 소요)");
+      setHeygenProgress("렌더링 중...");
       let attempts = 0;
       while (attempts < 36) {
         await new Promise(r=>setTimeout(r,5000));
-        const sr = await fetch("/heygen/v1/video_status.get?video_id="+videoId, { headers: { "X-Api-Key": HEYGEN_KEY } });
+        const sr = await fetch("/heygen/v1/video_status.get?video_id="+videoId,{headers:{"X-Api-Key":HEYGEN_KEY}});
         const sd = await sr.json();
-        const status = sd.data?.status;
-        setHeygenProgress("렌더링 중... "+Math.min(attempts*8,90)+"%");
-        if (status === "completed") {
-          setHeygenResult({ avatar:avatar?.name, duration:heygenScript.length>100?"약 30초":"약 15초", videoUrl:sd.data?.video_url, thumbnailUrl:sd.data?.thumbnail_url });
-          setHeygenProgress(""); setHeygenGenerating(false); return;
-        } else if (status === "failed") { throw new Error("영상 생성 실패"); }
-        attempts++;
-      }
-      throw new Error("시간 초과 (3분)");
-    } catch(e) { setHeygenError(e.message||"오류 발생"); setHeygenProgress(""); setHeygenGenerating(false); }
-  };
-  const simulateHighsfield = () => { setHiggsfieldGenerating(true); setTimeout(()=>{ setHiggsfieldResult({mode:higgsfieldMode==="product"?"제품 광고":"VFX 숏츠"}); setHiggsfieldGenerating(false); },2000); };
-  const genAiReply = async () => {
-    if (!selectedComment) return; setAiReplying(true);
-    try { const data = await callClaude([{role:"user",content:"K뷰티 인플루언서 댓글 답글: \""+selectedComment.text+"\". 짧게 이모지 1-2개."}]); setReplyText(extractText(data).trim()); }
-    catch {} setAiReplying(false);
-  };
-
-  // TikTok OAuth 로그인 (PKCE)
-  const loginTikTok = async () => {
-    const CLIENT_KEY = import.meta.env.VITE_TIKTOK_CLIENT_KEY;
-    const redirectUri = encodeURIComponent(window.location.origin + "/tiktok-callback");
-    const scope = encodeURIComponent("user.info.basic,video.upload,video.list");
-    const state = Math.random().toString(36).slice(2);
-    const codeVerifier = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b=>b.toString(16).padStart(2,'0')).join('');
-    const encoder = new TextEncoder();
-    const data = encoder.encode(codeVerifier);
-    const digest = await crypto.subtle.digest('SHA-256', data);
-    const codeChallenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
-    sessionStorage.setItem("tt_state", state);
-    sessionStorage.setItem("tt_code_verifier", codeVerifier);
-    window.location.href = `https://www.tiktok.com/v2/auth/authorize?client_key=${CLIENT_KEY}&response_type=code&scope=${scope}&redirect_uri=${redirectUri}&state=${state}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
-  };
-
-  // TikTok 로그아웃
-  const logoutTikTok = () => {
-    localStorage.removeItem("tt_token");
-    localStorage.removeItem("tt_user");
-    setTiktokToken("");
-    setTiktokUser("");
-  };
-
-  // TikTok 영상 업로드
-  const uploadToTikTok = async (videoUrl, cap) => {
-    if (!tiktokToken) { alert("TikTok 로그인이 필요해요!"); return; }
-    if (!videoUrl) { alert("영상 URL이 없어요!"); return; }
-    setTiktokUploading(true); setTiktokUploadError(""); setTiktokUploadResult(null);
-    try {
-      const initRes = await fetch("/tiktok/v2/post/publish/video/init/", {
-        method: "POST",
-        headers: { "Authorization": "Bearer "+tiktokToken, "Content-Type": "application/json; charset=UTF-8" },
-        body: JSON.stringify({
-          post_info: { title: cap||"✨ K-Beauty routine #kbeauty #skincare #millimilli", privacy_level:"SELF_ONLY", disable_duet:false, disable_comment:false, disable_stitch:false },
-          source_info: { source:"PULL_FROM_URL", video_url: videoUrl }
-        })
-      });
-      const initData = await initRes.json();
-      if (initData.error?.code && initData.error.code !== "ok") throw new Error(initData.error.message||"업로드 초기화 실패");
-      const publishId = initData.data?.publish_id;
-      if (!publishId) throw new Error("publish_id 없음");
-      let attempts = 0;
-      while (attempts < 20) {
-        await new Promise(r=>setTimeout(r,3000));
-        const statusRes = await fetch("/tiktok/v2/post/publish/status/fetch/", {
-          method: "POST",
-          headers: { "Authorization": "Bearer "+tiktokToken, "Content-Type": "application/json; charset=UTF-8" },
-          body: JSON.stringify({ publish_id: publishId })
-        });
-        const statusData = await statusRes.json();
-        const status = statusData.data?.status;
-        if (status === "PUBLISH_COMPLETE") { setTiktokUploadResult({ publishId, status:"✅ TikTok 업로드 완료!" }); setTiktokUploading(false); return; }
-        else if (status === "FAILED") { throw new Error("업로드 실패: "+statusData.data?.fail_reason); }
+        setHeygenProgress(`렌더링 중... ${Math.min(attempts*8,90)}%`);
+        if (sd.data?.status==="completed") { setHeygenResult({videoUrl:sd.data?.video_url,thumbnailUrl:sd.data?.thumbnail_url}); setHeygenProgress(""); setHeygenGenerating(false); return; }
+        else if (sd.data?.status==="failed") throw new Error("영상 생성 실패");
         attempts++;
       }
       throw new Error("시간 초과");
-    } catch(e) { setTiktokUploadError(e.message||"오류 발생"); setTiktokUploading(false); }
+    } catch(e) { setHeygenError(e.message); setHeygenProgress(""); setHeygenGenerating(false); }
   };
 
-  const S = {
-    wrap: {minHeight:"100vh",background:"#FAFAF8",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",color:"#111"},
-    nav:  {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 32px",height:58,background:"#fff",borderBottom:"1px solid #E8E8E4",position:"sticky",top:0,zIndex:50},
-    logo: {fontSize:14,fontWeight:800,letterSpacing:".12em"},
-    body: {maxWidth:1100,margin:"0 auto",padding:"28px 24px"},
-    tabBar: {display:"flex",gap:2,marginBottom:12,background:"#F0F0EC",borderRadius:11,padding:4,overflowX:"auto"},
-    tabBtn: (a)=>({padding:"8px 14px",borderRadius:8,border:"none",fontWeight:500,fontSize:12,cursor:"pointer",background:a?"#fff":"transparent",color:a?"#111":"#888",boxShadow:a?"0 1px 4px rgba(0,0,0,.08)":"none",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:5}),
-    tabNum: (a)=>({fontSize:9,fontWeight:800,letterSpacing:".05em",color:a?"#C4267D":"#BBB"}),
-    flowBar: {display:"flex",alignItems:"center",marginBottom:20,padding:"10px 16px",background:"#fff",border:"1px solid #E8E8E4",borderRadius:10,overflowX:"auto",gap:0},
-    flowStep: (a,done)=>({display:"flex",alignItems:"center",gap:6,cursor:"pointer",padding:"4px 8px",borderRadius:7,background:a?"#111":done?"#F7F7F5":"transparent",transition:"background .15s"}),
-    flowLabel: (a,done)=>({fontSize:11,fontWeight:a?700:500,color:a?"#fff":done?"#059669":"#AAA",whiteSpace:"nowrap"}),
-    flowNum: (a,done)=>({width:18,height:18,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,background:a?"#C4267D":done?"#059669":"#DDDDD8",color:a||done?"#fff":"#AAA",flexShrink:0}),
-    flowArrow: {fontSize:11,color:"#DDD",margin:"0 2px",flexShrink:0},
-    guideBanner: {display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"linear-gradient(90deg,#FFF0F5,#F0EEFF)",border:"1px solid #E8D5F5",borderRadius:9,marginBottom:20,fontSize:12,color:"#555",lineHeight:1.6},
-    card: {background:"#fff",border:"1px solid #E8E8E4",borderRadius:12,padding:20,marginBottom:16},
-    cardSm: {background:"#fff",border:"1px solid #E8E8E4",borderRadius:10,padding:14,marginBottom:12},
-    title: {fontSize:21,fontWeight:800,color:"#111",marginBottom:4,letterSpacing:"-.02em"},
-    sub: {fontSize:13,color:"#888",marginBottom:22},
-    lbl: {fontSize:11,fontWeight:600,color:"#888",textTransform:"uppercase",letterSpacing:".07em",marginBottom:6},
-    inp: {width:"100%",border:"1px solid #DDDDD8",borderRadius:9,padding:"10px 13px",fontSize:13,color:"#111",background:"#fff",outline:"none",boxSizing:"border-box"},
-    btnBlack: {display:"inline-flex",alignItems:"center",gap:7,background:"#111",color:"#fff",padding:"10px 18px",borderRadius:9,fontSize:13,fontWeight:500,border:"none",cursor:"pointer"},
-    btnOut: {display:"inline-flex",alignItems:"center",background:"transparent",color:"#333",padding:"9px 16px",borderRadius:9,fontSize:13,fontWeight:500,border:"1px solid #DDDDD8",cursor:"pointer"},
-    btnSm: {padding:"5px 11px",fontSize:12,borderRadius:7},
-    g2: {display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:16},
-    g3: {display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:12},
-    g4: {display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12},
-    divider: {height:1,background:"#E8E8E4",margin:"14px 0"},
-    badge: (t)=>({display:"inline-flex",alignItems:"center",padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:500,background:t==="pink"?"#FFF0F5":t==="purple"?"#F0EEFF":t==="green"?"#EDFDF4":t==="amber"?"#FFFBEB":"#F5F5F2",color:t==="pink"?"#C4267D":t==="purple"?"#4F46E5":t==="green"?"#059669":t==="amber"?"#B45309":"#777"}),
-    chip: (t)=>({display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:12,fontWeight:500,margin:2,background:t==="pink"?"#FFF0F5":"#F5F5F2",color:t==="pink"?"#C4267D":"#555"}),
-    toggle: (on)=>({width:42,height:23,borderRadius:12,background:on?"#111":"#DDDDD8",position:"relative",cursor:"pointer",flexShrink:0,border:"none"}),
-    knob: (on)=>({width:17,height:17,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:on?22:3,transition:"left .2s"}),
-    dot: {width:7,height:7,borderRadius:"50%",background:"#059669",flexShrink:0,display:"inline-block"},
+  const uploadToTikTok = async (videoUrl, cap) => {
+    if (!tiktokToken) { alert("TikTok 로그인이 필요해요!"); return; }
+    setTiktokUploading(true); setTiktokUploadError(""); setTiktokUploadResult(null);
+    try {
+      const initRes = await fetch("/tiktok/v2/post/publish/video/init/",{method:"POST",headers:{"Authorization":"Bearer "+tiktokToken,"Content-Type":"application/json; charset=UTF-8"},
+        body:JSON.stringify({post_info:{title:cap||"✨ K-Beauty #kbeauty #millimilli",privacy_level:"SELF_ONLY",disable_duet:false,disable_comment:false,disable_stitch:false},source_info:{source:"PULL_FROM_URL",video_url:videoUrl}})});
+      const initData = await initRes.json();
+      if (initData.error?.code && initData.error.code!=="ok") throw new Error(initData.error.message);
+      const publishId = initData.data?.publish_id;
+      if (!publishId) throw new Error("publish_id 없음");
+      let attempts = 0;
+      while (attempts<20) {
+        await new Promise(r=>setTimeout(r,3000));
+        const sr = await fetch("/tiktok/v2/post/publish/status/fetch/",{method:"POST",headers:{"Authorization":"Bearer "+tiktokToken,"Content-Type":"application/json; charset=UTF-8"},body:JSON.stringify({publish_id:publishId})});
+        const sd = await sr.json();
+        if (sd.data?.status==="PUBLISH_COMPLETE") { setTiktokUploadResult({status:"✅ TikTok 업로드 완료!"}); setTiktokUploading(false); return; }
+        else if (sd.data?.status==="FAILED") throw new Error("업로드 실패");
+        attempts++;
+      }
+      throw new Error("시간 초과");
+    } catch(e) { setTiktokUploadError(e.message); setTiktokUploading(false); }
   };
 
-  const postRow = (p, extra) => (
-    <div key={p.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 0",borderBottom:"1px solid #E8E8E4"}}>
-      <div style={{width:38,height:38,borderRadius:9,background:"#F5F5F2",display:"flex",alignItems:"center",justifyContent:"center",fontSize:19,flexShrink:0}}>{p.thumb}</div>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:13,fontWeight:500,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title}</div>
-        <div style={{fontSize:11,color:"#999",marginTop:2}}>{p.date} {p.time} · {FLAG[p.country]}</div>
-      </div>
-      <span style={S.badge(p.status==="published"?"green":p.status==="scheduled"?"purple":p.status==="failed"?"amber":"gray")}>{STATUS_L[p.status]}</span>
-      {extra}
-    </div>
-  );
+  const genAiReply = async () => {
+    if (!selectedComment) return; setAiReplying(true);
+    try { const data = await callClaude([{role:"user",content:`K뷰티 인플루언서 댓글 답글: "${selectedComment.text}". 짧게 이모지 1-2개.`}]); setReplyText(extractText(data).trim()); }
+    catch {} setAiReplying(false);
+  };
+
+  const calDays = () => ({first:new Date(calYear,calMonth,1).getDay(),total:new Date(calYear,calMonth+1,0).getDate()});
+  const postsOnDay = (d) => posts.filter(p=>{const dt=new Date(p.date);return dt.getDate()===d&&dt.getMonth()===calMonth&&dt.getFullYear()===calYear;});
+
+  // ── STYLES ────────────────────────────────────────────────────
+  const C = {
+    purple:"#8435F3", purpleDark:"#5B2EFF", purpleLight:"#8E5CFF",
+    purpleBg:"rgba(132,53,243,0.05)", purpleBorder:"rgba(132,53,243,0.3)",
+    gray50:"#F9FAFB", gray100:"#F3F4F6", gray200:"#E5E7EB",
+    gray400:"#9CA3AF", gray500:"#6B7280", gray700:"#374151", gray900:"#111827",
+    green:"#059669", greenBg:"#D1FAE5", amber:"#D97706", amberBg:"#FFFBEB",
+    red:"#E11D48", redBg:"#FFE4E6", white:"#FFFFFF",
+  };
 
   return (
-    <div style={S.wrap}>
+    <div style={{display:"flex",minHeight:"100vh",background:C.gray50,fontFamily:"'Pretendard','Apple SD Gothic Neo',-apple-system,sans-serif",color:C.gray900}}>
 
-      {/* ── NAV ── */}
-      <div style={S.nav}>
-        <span style={S.logo}>AUTO TIKTOK STUDIO</span>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
+      {/* ── SIDEBAR ── */}
+      <div style={{width:256,flexShrink:0,position:"fixed",top:0,left:0,height:"100vh",background:"rgba(255,255,255,0.95)",backdropFilter:"blur(12px)",borderRight:`1px solid ${C.gray200}`,display:"flex",flexDirection:"column",zIndex:50}}>
+
+        {/* Logo */}
+        <div style={{padding:"24px 20px 20px",borderBottom:`1px solid ${C.gray200}`}}>
+          <div style={{fontSize:13,fontWeight:800,letterSpacing:".1em",color:C.gray900,marginBottom:4}}>AUTO TIKTOK STUDIO</div>
+          <div style={{fontSize:11,color:C.gray400}}>버추얼 인플루언서 자동화</div>
+        </div>
+
+        {/* TikTok 상태 */}
+        <div style={{padding:"14px 16px",borderBottom:`1px solid ${C.gray200}`}}>
           {tiktokToken ? (
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <div style={{display:"flex",alignItems:"center",gap:7,padding:"6px 14px",borderRadius:20,background:"#111",fontSize:12,fontWeight:600,color:"#fff"}}>
-                <span style={{width:7,height:7,borderRadius:"50%",background:"#4ade80",display:"inline-block",flexShrink:0}} />
-                @{tiktokUser||"TikTok 연결됨"}
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderRadius:8,background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,marginBottom:8}}>
+                <span style={{width:7,height:7,borderRadius:"50%",background:"#4ade80",flexShrink:0,display:"inline-block"}}/>
+                <span style={{fontSize:12,fontWeight:600,color:C.purple,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>@{tiktokUser||"연결됨"}</span>
               </div>
-              <button style={{...S.btnOut,...S.btnSm,color:"#DC2626",borderColor:"#FCA5A5",fontSize:11}} onClick={logoutTikTok}>로그아웃</button>
+              <button onClick={logoutTikTok} style={{width:"100%",padding:"6px",borderRadius:6,border:`1px solid ${C.gray200}`,background:"transparent",fontSize:11,color:C.gray500,cursor:"pointer"}}>로그아웃</button>
             </div>
           ) : (
-            <button style={{...S.btnBlack,...S.btnSm}} onClick={loginTikTok}>🔗 TikTok 연결</button>
+            <button onClick={loginTikTok} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:`linear-gradient(135deg,${C.purpleLight},${C.purpleDark})`,color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>
+              🔗 TikTok 연결
+            </button>
           )}
         </div>
-      </div>
 
-      <div style={S.body}>
-        {/* Tab Bar */}
-        <div style={S.tabBar}>
-          {TABS.map(t => (
-            <button key={t.id} style={S.tabBtn(tab===t.id)} onClick={()=>setTab(t.id)}>
-              <span style={S.tabNum(tab===t.id)}>{t.num}</span>
-              {t.icon} {t.label}
+        {/* Nav */}
+        <nav style={{padding:"10px 10px",flex:1,overflowY:"auto"}}>
+          {NAV.map((n,i)=>(
+            <button key={n.id} onClick={()=>setTab(n.id)} style={{
+              width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:8,border:"none",
+              background:tab===n.id?C.purpleBg:"transparent",
+              color:tab===n.id?C.purple:C.gray500,
+              fontWeight:tab===n.id?600:400,fontSize:13,cursor:"pointer",marginBottom:2,textAlign:"left",
+              borderLeft:tab===n.id?`3px solid ${C.purple}`:"3px solid transparent",
+            }}>
+              <span style={{fontSize:15,width:20,textAlign:"center"}}>{n.icon}</span>
+              <span>{n.label}</span>
+              {tab===n.id&&<span style={{marginLeft:"auto",width:6,height:6,borderRadius:"50%",background:C.purple}}/>}
             </button>
           ))}
-        </div>
+        </nav>
 
-        {/* Flow Step Bar */}
-        <div style={S.flowBar}>
-          {FLOW_STEPS.map((s,i)=>{
-            const tabOrder = FLOW_STEPS.map(x=>x.id);
-            const curIdx = tabOrder.indexOf(tab);
-            const thisIdx = tabOrder.indexOf(s.id);
-            const isActive = tab===s.id;
-            const isDone = thisIdx < curIdx;
-            return (
-              <div key={s.id} style={{display:"flex",alignItems:"center"}}>
-                <div style={S.flowStep(isActive,isDone)} onClick={()=>setTab(s.id)}>
-                  <div style={S.flowNum(isActive,isDone)}>{isDone?"✓":i+1}</div>
-                  <span style={S.flowLabel(isActive,isDone)}>{s.label}</span>
-                </div>
-                {i < FLOW_STEPS.length-1 && <span style={S.flowArrow}>→</span>}
+        {/* 캐릭터 요약 */}
+        {personaSaved && (
+          <div style={{padding:"14px 16px",borderTop:`1px solid ${C.gray200}`,background:C.gray50}}>
+            <div style={{fontSize:10,fontWeight:600,color:C.gray400,letterSpacing:".05em",marginBottom:8}}>활성 캐릭터</div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:32,height:32,borderRadius:"50%",background:`linear-gradient(135deg,${C.purpleLight},${C.purpleDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#fff",flexShrink:0}}>✦</div>
+              <div>
+                <div style={{fontSize:13,fontWeight:600,color:C.gray900}}>{persona.name}</div>
+                <div style={{fontSize:11,color:C.gray400}}>{persona.concept}</div>
               </div>
-            );
-          })}
-        </div>
-
-        {/* Guide Banner */}
-        <div style={S.guideBanner}>
-          <span style={{fontSize:16,flexShrink:0}}>{TABS.find(t=>t.id===tab)?.icon}</span>
-          <div>
-            <span style={{fontWeight:700,color:"#111",marginRight:6}}>STEP {TABS.find(t=>t.id===tab)?.num}</span>
-            {TABS.find(t=>t.id===tab)?.guide}
-          </div>
-        </div>
-
-        {/* TikTok 미연결 배너 */}
-        {!tiktokToken && (
-          <div style={{padding:"12px 16px",background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:10,marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <div style={{fontSize:13,color:"#92400E"}}>🔗 TikTok 계정을 연결하면 영상을 바로 업로드할 수 있어요!</div>
-            <button style={{...S.btnBlack,...S.btnSm,background:"#EA4C89"}} onClick={loginTikTok}>TikTok 연결하기</button>
+            </div>
           </div>
         )}
+      </div>
 
-        {/* ══ 콘텐츠 생성 ══ */}
-        {tab==="create" && (
+      {/* ── MAIN CONTENT ── */}
+      <div style={{marginLeft:256,flex:1,minHeight:"100vh"}}>
+
+        {/* Top bar */}
+        <div style={{height:56,background:C.white,borderBottom:`1px solid ${C.gray200}`,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 28px",position:"sticky",top:0,zIndex:40}}>
           <div>
-            <div style={S.title}>콘텐츠 생성</div>
-            <div style={S.sub}>참조 URL을 넣으면 AI가 스크립트·자막·해시태그를 만들어줘요</div>
-            {step===1 && (
-              <div style={{...S.card,maxWidth:580}}>
-                <div style={S.lbl}>참조 영상 URL</div>
-                <input style={{...S.inp,marginBottom:12}} value={srcUrl} onChange={e=>setSrcUrl(e.target.value)} placeholder="https://www.tiktok.com/@user/video/..." />
-                <button style={{...S.btnBlack,width:"100%",justifyContent:"center",opacity:!srcUrl.trim()?0.4:1}} onClick={generateContent} disabled={!srcUrl.trim()}>
-                  ⚡ AI 콘텐츠 생성
-                </button>
-                <div style={S.divider} />
-                <div style={S.lbl}>TikTok 트렌드 참고</div>
-                <div style={{display:"flex",gap:8}}>
-                  {[["# 해시태그","https://ads.tiktok.com/business/creativecenter/trend/hashtag/pc/en"],["♪ 음악","https://ads.tiktok.com/business/creativecenter/trend/sound/pc/en"],["▷ 바이럴","https://ads.tiktok.com/business/creativecenter/trend/video/pc/en"]].map(([l,u],i)=>(
-                    <a key={i} href={u} target="_blank" rel="noreferrer" style={{flex:1,padding:"9px 8px",borderRadius:8,border:"1px solid #E8E8E4",background:"#fff",fontSize:12,color:"#555",textDecoration:"none",textAlign:"center"}}>
-                      {l} ↗
-                    </a>
+            <span style={{fontSize:16,fontWeight:700,color:C.gray900}}>{NAV.find(n=>n.id===tab)?.label}</span>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            {!tiktokToken && (
+              <div style={{padding:"5px 12px",borderRadius:6,background:C.amberBg,border:`1px solid #FCD34D`,fontSize:12,color:C.amber}}>
+                ⚠ TikTok 미연결
+              </div>
+            )}
+            <div style={{width:32,height:32,borderRadius:"50%",background:`linear-gradient(135deg,${C.purpleLight},${C.purpleDark})`,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:700}}>M</div>
+          </div>
+        </div>
+
+        <div style={{padding:"28px 28px",maxWidth:1000}}>
+
+          {/* ══ AI 스타일 ══ */}
+          {tab==="style" && (
+            <div>
+              {/* 프리셋 */}
+              <div style={{marginBottom:24}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.gray500,marginBottom:12}}>빠른 시작 — 프리셋 선택</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10}}>
+                  {PRESETS.map(p=>(
+                    <div key={p.id} onClick={()=>{setPersona(prev=>({...prev,vibe:p.vibe,speech:p.speech,concept:p.label,age:p.age,lang:p.lang}));setPersonaSaved(false);}}
+                      style={{padding:"14px 10px",borderRadius:10,border:`1.5px solid ${C.gray200}`,cursor:"pointer",background:C.white,textAlign:"center",transition:"all .15s",
+                        ...(persona.concept===p.label?{borderColor:C.purple,background:C.purpleBg}:{})}}>
+                      <div style={{fontSize:22,marginBottom:6}}>{p.icon}</div>
+                      <div style={{fontSize:11,fontWeight:600,color:persona.concept===p.label?C.purple:C.gray900}}>{p.label}</div>
+                    </div>
                   ))}
                 </div>
               </div>
-            )}
-            {step===2 && (
-              <div style={{...S.card,maxWidth:580,textAlign:"center",padding:"56px 40px"}}>
-                <div style={{fontSize:30,marginBottom:14}}>⚡</div>
-                <div style={{fontSize:15,fontWeight:600,color:"#111",marginBottom:6}}>AI가 콘텐츠를 만드는 중...</div>
-                <div style={{fontSize:13,color:"#999"}}>스크립트 · 자막 · 해시태그 생성 중</div>
-              </div>
-            )}
-            {step===3 && gen && (
-              <div style={S.g2}>
+
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+                {/* 왼쪽 */}
                 <div>
-                  <div style={{...S.card,borderLeft:"3px solid #C4267D",marginBottom:14}}>
-                    <div style={S.lbl}>🎯 HOOK — 첫 3초</div>
-                    <div style={{fontSize:15,fontWeight:600,color:"#111",lineHeight:1.7}}>{gen.hook}</div>
+                  {/* 채팅 */}
+                  <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,overflow:"hidden",marginBottom:16}}>
+                    <div style={{padding:"14px 18px",borderBottom:`1px solid ${C.gray200}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:14,fontWeight:600}}>💬 AI 채팅으로 캐릭터 설정</span>
+                      <span style={{fontSize:11,color:C.gray400}}>자유롭게 말해보세요</span>
+                    </div>
+                    <div ref={chatRef} style={{height:220,overflowY:"auto",padding:16,display:"flex",flexDirection:"column",gap:10}}>
+                      {chatMsgs.map((m,i)=>(
+                        <div key={i} style={{display:"flex",flexDirection:"column",alignItems:m.role==="user"?"flex-end":"flex-start",gap:8}}>
+                          <div style={{maxWidth:"85%",padding:"10px 14px",borderRadius:m.role==="user"?"12px 12px 2px 12px":"12px 12px 12px 2px",
+                            background:m.role==="user"?C.purple:C.gray100,color:m.role==="user"?"#fff":C.gray900,fontSize:13,lineHeight:1.7}}>
+                            {m.text||"..."}
+                          </div>
+                          {/* 캐릭터 카드 제안 */}
+                          {m.role==="ai" && m.suggestion && (
+                            <div style={{width:"100%",maxWidth:"85%",padding:14,background:"#FFF0F5",border:`1.5px solid #F9A8D4`,borderRadius:12}}>
+                              <div style={{fontSize:11,fontWeight:700,color:"#C4267D",marginBottom:10}}>✦ 추천 캐릭터</div>
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:10}}>
+                                {[["이름","name"],["나이","age"],["언어","lang"],["무드","vibe"],["말투","speech"],["컨셉","concept"]].map(([lbl,key])=>(
+                                  m.suggestion[key] && (
+                                    <div key={key} style={{background:C.white,borderRadius:7,padding:"7px 10px"}}>
+                                      <div style={{fontSize:10,color:C.gray400,marginBottom:2}}>{lbl}</div>
+                                      <div style={{fontSize:12,fontWeight:600,color:C.gray900}}>{m.suggestion[key]}</div>
+                                    </div>
+                                  )
+                                ))}
+                              </div>
+                              <button onClick={()=>{setPersona(prev=>({...prev,...m.suggestion}));setPersonaSaved(false);setChatMsgs(p=>p.map((x,xi)=>xi===i?{...x,applied:true}:x));}}
+                                style={{width:"100%",padding:"8px",borderRadius:7,border:"none",background:m.applied?C.gray200:C.purple,color:m.applied?C.gray500:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                                {m.applied?"✓ 적용됨":"프리뷰에 적용 →"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {chatLoading && (
+                        <div style={{display:"flex",alignItems:"center",gap:6,padding:"10px 14px",borderRadius:"12px 12px 12px 2px",background:C.gray100,width:"fit-content"}}>
+                          <span style={{fontSize:12,color:C.gray500}}>생성 중...</span>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{padding:12,borderTop:`1px solid ${C.gray200}`,display:"flex",gap:8}}>
+                      <input style={{flex:1,border:`1px solid ${C.gray200}`,borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none",background:C.white}}
+                        value={chatInput} onChange={e=>setChatInput(e.target.value)}
+                        onKeyPress={e=>e.key==="Enter"&&sendChat()} placeholder="예: 20대 K뷰티 언니, 발랄하게..." />
+                      <button onClick={sendChat} disabled={!chatInput.trim()||chatLoading}
+                        style={{padding:"9px 16px",borderRadius:8,border:"none",background:C.purple,color:"#fff",fontSize:13,fontWeight:500,cursor:"pointer",opacity:!chatInput.trim()||chatLoading?0.5:1}}>전송</button>
+                    </div>
                   </div>
-                  <div style={{...S.card,marginBottom:14}}>
-                    <div style={S.lbl}>자막 선택</div>
-                    {gen.captions?.map((c,i)=>(
-                      <div key={i} onClick={()=>setCaption(c)} style={{padding:"10px 12px",borderRadius:8,border:"1px solid "+(caption===c?"#111":"#E8E8E4"),background:caption===c?"#111":"#fff",color:caption===c?"#fff":"#333",fontSize:13,cursor:"pointer",marginBottom:6,lineHeight:1.6}}>
-                        {c}
+
+                  {/* 레퍼런스 분석 */}
+                  <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:18}}>
+                    <div style={{fontSize:14,fontWeight:600,marginBottom:12}}>🔍 레퍼런스 계정 분석</div>
+                    <div style={{display:"flex",gap:8,marginBottom:12}}>
+                      <input style={{flex:1,border:`1px solid ${C.gray200}`,borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}
+                        value={refUrl} onChange={e=>{setRefUrl(e.target.value);setRefAnalysis(null);}} placeholder="@username 또는 TikTok URL" />
+                      <button onClick={analyzeRef} disabled={analyzing||!refUrl.trim()}
+                        style={{padding:"9px 16px",borderRadius:8,border:"none",background:analyzing?C.gray200:C.gray900,color:analyzing?C.gray500:"#fff",fontSize:13,cursor:"pointer",whiteSpace:"nowrap"}}>
+                        {analyzing?"분석 중...":"분석"}
+                      </button>
+                    </div>
+                    {analyzing && (
+                      <div style={{padding:"16px",background:C.gray50,borderRadius:9,fontSize:13,color:C.gray500,textAlign:"center"}}>
+                        🔍 스타일 분석 중...
+                      </div>
+                    )}
+                    {refAnalysis && (
+                      <div style={{border:`1px solid ${C.gray200}`,borderRadius:10,overflow:"hidden"}}>
+                        <div style={{padding:"12px 14px",background:C.gray50,borderBottom:`1px solid ${C.gray200}`}}>
+                          <div style={{fontSize:13,fontWeight:700,marginBottom:3}}>{refAnalysis.account}</div>
+                          <div style={{fontSize:12,color:C.gray500}}>{refAnalysis.summary}</div>
+                        </div>
+                        <div style={{padding:14}}>
+                          <div style={{fontSize:11,fontWeight:600,color:C.gray400,marginBottom:10}}>유사 스타일 추천</div>
+                          {refAnalysis.suggestions?.map((s,i)=>(
+                            <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",borderRadius:8,border:`1px solid ${C.gray200}`,marginBottom:6,background:C.white}}>
+                              <div>
+                                <div style={{fontSize:13,fontWeight:600}}>{s.label}</div>
+                                <div style={{fontSize:11,color:C.gray400,marginTop:2}}>{s.desc}</div>
+                              </div>
+                              <button onClick={()=>{setPersona(prev=>({...prev,...s.persona}));setPersonaSaved(false);}}
+                                style={{padding:"6px 14px",borderRadius:6,border:`1px solid ${C.purpleBorder}`,background:C.purpleBg,color:C.purple,fontSize:12,fontWeight:500,cursor:"pointer"}}>
+                                적용
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 오른쪽: 캐릭터 프리뷰 */}
+                <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:20,height:"fit-content"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+                    <span style={{fontSize:14,fontWeight:600}}>캐릭터 프리뷰</span>
+                    {personaSaved
+                      ? <span style={{padding:"3px 10px",borderRadius:20,background:C.greenBg,color:C.green,fontSize:11,fontWeight:600}}>✓ 저장됨</span>
+                      : <button onClick={()=>setPersonaSaved(true)} style={{padding:"7px 16px",borderRadius:6,border:"none",background:C.purple,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>💾 저장</button>
+                    }
+                  </div>
+
+                  {/* 아바타 */}
+                  <div style={{textAlign:"center",marginBottom:20}}>
+                    <div style={{width:72,height:72,borderRadius:"50%",background:`linear-gradient(135deg,${C.purpleLight},${C.purpleDark})`,margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,color:"#fff"}}>✦</div>
+                    <div style={{fontSize:20,fontWeight:800,color:C.gray900}}>{persona.name||"미설정"}</div>
+                    <div style={{fontSize:12,color:C.gray400,marginTop:4}}>{persona.age}세 · {persona.lang}</div>
+                    {personaSaved && <div style={{marginTop:8,display:"inline-flex",alignItems:"center",gap:4,padding:"4px 12px",borderRadius:20,background:C.purpleBg,fontSize:11,color:C.purple,fontWeight:600}}>✦ 활성 캐릭터</div>}
+                  </div>
+
+                  {/* 속성 편집 */}
+                  <div style={{display:"flex",flexDirection:"column",gap:0,marginBottom:16}}>
+                    {[["무드·분위기","vibe"],["말투 스타일","speech"],["컨셉","concept"]].map(([label,key])=>(
+                      <div key={key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:`1px solid ${C.gray100}`}}>
+                        <span style={{fontSize:12,color:C.gray500,flexShrink:0,width:80}}>{label}</span>
+                        <input style={{flex:1,fontSize:13,color:C.gray900,fontWeight:500,textAlign:"right",border:"none",outline:"none",background:"transparent"}}
+                          value={persona[key]||""} onChange={e=>{setPersona(prev=>({...prev,[key]:e.target.value}));setPersonaSaved(false);}} />
                       </div>
                     ))}
                   </div>
-                  <div style={S.card}>
-                    <div style={S.lbl}>해시태그</div>
-                    <div style={{marginBottom:10}}>{gen.hashtags?.map((h,i)=><span key={i} style={S.chip("pink")}>{h}</span>)}</div>
-                    <div style={S.divider} />
-                    <div style={S.lbl}>CTA</div>
-                    <div style={{fontSize:13,color:"#4F46E5",fontWeight:500}}>{gen.cta}</div>
-                  </div>
-                </div>
-                <div>
-                  <div style={{display:"flex",justifyContent:"center",marginBottom:14}}>
-                    <div style={{width:210,height:375,background:"#111",borderRadius:22,position:"relative",overflow:"hidden",border:"5px solid #1a1a1a"}}>
-                      <div style={{position:"absolute",inset:0,background:"linear-gradient(160deg,#1a0820,#0a1020)"}} />
-                      <div style={{position:"absolute",bottom:64,left:0,right:0,padding:"0 10px"}}>
-                        <div style={{background:"rgba(0,0,0,.7)",borderRadius:6,padding:"7px 10px",fontSize:10,color:"#fff",lineHeight:1.5,textAlign:"center"}}>
-                          {caption || gen.hook}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{...S.card,marginBottom:14}}>
-                    <div style={S.lbl}>스크립트 ({gen.duration}초)</div>
-                    <div style={{fontSize:12,color:"#555",lineHeight:1.8,maxHeight:80,overflowY:"auto"}}>{gen.script}</div>
-                  </div>
-                  <div style={{display:"flex",gap:8}}>
-                    <button style={{...S.btnBlack,flex:1,justifyContent:"center"}} onClick={()=>setTab("schedule")}>📅 예약하기</button>
-                    <button style={S.btnOut} onClick={()=>{setStep(1);setGen(null);}}>다시 생성</button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
-        {/* ══ 영상 제작 ══ */}
-        {tab==="video" && (
-          <div>
-            <div style={S.title}>영상 제작</div>
-            <div style={S.sub}>HeyGen 아바타 영상 · Higgsfield 제품광고/VFX</div>
-            <div style={{...S.card,padding:"14px 18px",marginBottom:20}}>
-              <div style={{fontSize:13,fontWeight:600,color:"#111",marginBottom:12}}>API 연동</div>
-              <div style={S.g2}>
-                <div>
-                  <div style={S.lbl}>HeyGen API Key</div>
-                  <div style={{display:"flex",gap:8}}>
-                    <input style={{...S.inp,flex:1}} type="password" value={heygenKey} onChange={e=>setHeygenKey(e.target.value)} placeholder="hg_xxxxxxxxxxxxxxxx" />
-                    <div style={{display:"flex",alignItems:"center",padding:"0 10px",borderRadius:9,border:"1px solid #E8E8E4",background:heygenKey?"#EDFDF4":"#F7F7F5",fontSize:12,color:heygenKey?"#059669":"#AAA",whiteSpace:"nowrap"}}>
-                      {heygenKey?"✓":"미연결"}
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <div style={S.lbl}>Higgsfield Cloud API Key</div>
-                  <div style={{display:"flex",gap:8}}>
-                    <input style={{...S.inp,flex:1}} type="password" value={higgsfieldKey} onChange={e=>setHiggsfieldKey(e.target.value)} placeholder="hf_cloud_xxxxxxxx" />
-                    <div style={{display:"flex",alignItems:"center",padding:"0 10px",borderRadius:9,border:"1px solid #E8E8E4",background:higgsfieldKey?"#EDFDF4":"#F7F7F5",fontSize:12,color:higgsfieldKey?"#059669":"#AAA",whiteSpace:"nowrap"}}>
-                      {higgsfieldKey?"✓":"미연결"}
+                  {/* 샘플 멘트 */}
+                  <div style={{padding:"14px",background:C.gray50,borderRadius:10,border:`1px solid ${C.gray100}`}}>
+                    <div style={{fontSize:11,color:C.gray400,marginBottom:6,fontWeight:500}}>샘플 멘트</div>
+                    <div style={{fontSize:13,color:C.gray700,lineHeight:1.8,fontStyle:"italic"}}>
+                      "안녕~ 오늘은 {persona.concept||"K뷰티"} 꿀템 가져왔어! {persona.vibe||""}한 느낌으로 소개할게 ✨"
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-            <div style={S.g2}>
-              <div style={{...S.card,borderTop:"3px solid #C4267D"}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-                  <div style={{width:36,height:36,borderRadius:9,background:"#FFF0F5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🎭</div>
-                  <div>
-                    <div style={{fontSize:14,fontWeight:700,color:"#111"}}>HeyGen</div>
-                    <div style={{fontSize:11,color:"#999"}}>아바타 말하는 영상</div>
+          )}
+
+          {/* ══ 콘텐츠 생성 ══ */}
+          {tab==="create" && (
+            <div>
+              {step===1 && (
+                <div style={{maxWidth:600}}>
+                  <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:24}}>
+                    <div style={{fontSize:13,fontWeight:600,color:C.gray500,marginBottom:6}}>참조 영상 URL</div>
+                    <input style={{width:"100%",border:`1px solid ${C.gray200}`,borderRadius:8,padding:"11px 14px",fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:14}}
+                      value={srcUrl} onChange={e=>setSrcUrl(e.target.value)} placeholder="https://www.tiktok.com/@user/video/..." />
+                    <button onClick={generateContent} disabled={!srcUrl.trim()}
+                      style={{width:"100%",padding:"12px",borderRadius:8,border:"none",background:srcUrl.trim()?C.purple:C.gray200,color:srcUrl.trim()?"#fff":C.gray400,fontSize:14,fontWeight:600,cursor:"pointer"}}>
+                      ⚡ AI 콘텐츠 생성
+                    </button>
+                    <div style={{marginTop:16,paddingTop:16,borderTop:`1px solid ${C.gray200}`}}>
+                      <div style={{fontSize:12,color:C.gray400,marginBottom:10}}>TikTok 트렌드 참고</div>
+                      <div style={{display:"flex",gap:8}}>
+                        {[["# 해시태그","https://ads.tiktok.com/business/creativecenter/trend/hashtag/pc/en"],["♪ 음악","https://ads.tiktok.com/business/creativecenter/trend/sound/pc/en"],["▷ 바이럴","https://ads.tiktok.com/business/creativecenter/trend/video/pc/en"]].map(([l,u],i)=>(
+                          <a key={i} href={u} target="_blank" rel="noreferrer" style={{flex:1,padding:"9px",borderRadius:8,border:`1px solid ${C.gray200}`,background:C.white,fontSize:12,color:C.gray500,textDecoration:"none",textAlign:"center",display:"block"}}>
+                            {l} ↗
+                          </a>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
+              )}
+              {step===2 && (
+                <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:"56px 40px",textAlign:"center",maxWidth:580}}>
+                  <div style={{fontSize:32,marginBottom:14}}>⚡</div>
+                  <div style={{fontSize:16,fontWeight:700,marginBottom:6}}>AI가 콘텐츠를 만드는 중...</div>
+                  <div style={{fontSize:13,color:C.gray400}}>스크립트 · 자막 · 해시태그 생성 중</div>
+                </div>
+              )}
+              {step===3 && gen && (
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+                  <div>
+                    <div style={{background:C.white,border:`2px solid ${C.purple}`,borderRadius:12,padding:18,marginBottom:14}}>
+                      <div style={{fontSize:11,fontWeight:600,color:C.purple,marginBottom:8}}>🎯 HOOK — 첫 3초</div>
+                      <div style={{fontSize:16,fontWeight:700,color:C.gray900,lineHeight:1.6}}>{gen.hook}</div>
+                    </div>
+                    <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:18,marginBottom:14}}>
+                      <div style={{fontSize:11,fontWeight:600,color:C.gray400,marginBottom:10}}>자막 선택</div>
+                      {gen.captions?.map((c,i)=>(
+                        <div key={i} onClick={()=>setCaption(c)} style={{padding:"10px 12px",borderRadius:8,border:`1.5px solid ${caption===c?C.purple:C.gray200}`,background:caption===c?C.purpleBg:C.white,color:caption===c?C.purple:C.gray700,fontSize:13,cursor:"pointer",marginBottom:6,lineHeight:1.6}}>
+                          {c}
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:18}}>
+                      <div style={{fontSize:11,fontWeight:600,color:C.gray400,marginBottom:8}}>해시태그</div>
+                      <div>{gen.hashtags?.map((h,i)=><span key={i} style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:12,margin:2,background:C.purpleBg,color:C.purple}}>{h}</span>)}</div>
+                      <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.gray100}`}}>
+                        <div style={{fontSize:11,color:C.gray400,marginBottom:4}}>CTA</div>
+                        <div style={{fontSize:13,color:C.purpleDark,fontWeight:500}}>{gen.cta}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{display:"flex",justifyContent:"center",marginBottom:14}}>
+                      <div style={{width:220,height:390,background:"#0a0a0a",borderRadius:24,position:"relative",overflow:"hidden",border:"5px solid #1a1a1a"}}>
+                        <div style={{position:"absolute",inset:0,background:"linear-gradient(160deg,#1a0820,#0a1020)"}} />
+                        <div style={{position:"absolute",bottom:60,left:0,right:0,padding:"0 12px"}}>
+                          <div style={{background:"rgba(0,0,0,.75)",borderRadius:8,padding:"8px 10px",fontSize:11,color:"#fff",lineHeight:1.6,textAlign:"center"}}>
+                            {caption||gen.hook}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:18,marginBottom:14}}>
+                      <div style={{fontSize:11,color:C.gray400,marginBottom:6}}>스크립트 ({gen.duration}초)</div>
+                      <div style={{fontSize:13,color:C.gray700,lineHeight:1.8,maxHeight:80,overflowY:"auto"}}>{gen.script}</div>
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>setTab("schedule")} style={{flex:1,padding:"11px",borderRadius:8,border:"none",background:C.purple,color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>📅 예약하기</button>
+                      <button onClick={()=>{setStep(1);setGen(null);}} style={{padding:"11px 16px",borderRadius:8,border:`1px solid ${C.gray200}`,background:C.white,fontSize:13,cursor:"pointer"}}>다시 생성</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ══ 영상 제작 ══ */}
+          {tab==="video" && (
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+              {/* HeyGen */}
+              <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:22,borderTop:`3px solid ${C.purple}`}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>
+                  <div style={{width:38,height:38,borderRadius:9,background:C.purpleBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🎭</div>
+                  <div><div style={{fontSize:15,fontWeight:700}}>HeyGen</div><div style={{fontSize:11,color:C.gray400}}>아바타 말하는 영상</div></div>
+                </div>
                 <div style={{marginBottom:14}}>
-                  <div style={S.lbl}>아바타</div>
+                  <div style={{fontSize:12,fontWeight:600,color:C.gray500,marginBottom:8}}>아바타</div>
                   {HEYGEN_AVATARS.map(a=>(
-                    <div key={a.id} onClick={()=>setSelectedAvatar(a.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:9,border:"1.5px solid "+(selectedAvatar===a.id?"#111":"#E8E8E4"),cursor:"pointer",background:selectedAvatar===a.id?"#111":"#fff",marginBottom:6}}>
-                      <div style={{width:32,height:32,borderRadius:"50%",background:"#F5F5F2",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{a.thumb}</div>
+                    <div key={a.id} onClick={()=>setSelectedAvatar(a.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:9,border:`1.5px solid ${selectedAvatar===a.id?C.purple:C.gray200}`,cursor:"pointer",background:selectedAvatar===a.id?C.purpleBg:C.white,marginBottom:6}}>
+                      <div style={{width:32,height:32,borderRadius:"50%",background:C.gray100,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{a.thumb}</div>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:13,fontWeight:600,color:selectedAvatar===a.id?"#fff":"#111"}}>{a.name}</div>
-                        <div style={{fontSize:11,color:selectedAvatar===a.id?"rgba(255,255,255,.6)":"#999"}}>{a.style}</div>
+                        <div style={{fontSize:13,fontWeight:600,color:selectedAvatar===a.id?C.purple:C.gray900}}>{a.name}</div>
+                        <div style={{fontSize:11,color:C.gray400}}>{a.style}</div>
                       </div>
                     </div>
                   ))}
                 </div>
                 <div style={{marginBottom:14}}>
-                  <div style={S.lbl}>스크립트</div>
-                  <textarea style={{...S.inp,minHeight:80,resize:"vertical",display:"block"}} value={heygenScript} onChange={e=>setHeygenScript(e.target.value)} placeholder="아바타가 말할 스크립트..." />
+                  <div style={{fontSize:12,fontWeight:600,color:C.gray500,marginBottom:6}}>스크립트</div>
+                  <textarea style={{width:"100%",border:`1px solid ${C.gray200}`,borderRadius:8,padding:"10px 12px",fontSize:13,minHeight:80,resize:"vertical",outline:"none",boxSizing:"border-box"}}
+                    value={heygenScript} onChange={e=>setHeygenScript(e.target.value)} placeholder="아바타가 말할 스크립트..." />
                 </div>
-                <button style={{...S.btnBlack,width:"100%",justifyContent:"center"}} onClick={simulateHeygen} disabled={heygenGenerating||!heygenScript.trim()}>
+                <button onClick={simulateHeygen} disabled={heygenGenerating||!heygenScript.trim()}
+                  style={{width:"100%",padding:"11px",borderRadius:8,border:"none",background:heygenGenerating?C.gray200:C.purple,color:heygenGenerating?C.gray500:"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>
                   {heygenGenerating?"⏳ "+heygenProgress:"🎭 HeyGen 영상 생성"}
                 </button>
-                {heygenGenerating && (
-                  <div style={{marginTop:12,height:4,background:"#E8E8E4",borderRadius:99}}>
-                    <div style={{height:4,borderRadius:99,background:"#C4267D",width:heygenProgress.includes("%")?heygenProgress.split("%")[0].split(" ").pop()+"%":"20%",transition:"width .5s"}} />
-                  </div>
-                )}
-                {heygenError && <div style={{marginTop:12,padding:"10px 14px",background:"#FEF2F2",borderRadius:9,fontSize:12,color:"#DC2626"}}>⚠ {heygenError}</div>}
+                {heygenError && <div style={{marginTop:10,padding:"10px 14px",background:C.redBg,borderRadius:8,fontSize:12,color:C.red}}>⚠ {heygenError}</div>}
                 {heygenResult && (
-                  <div style={{marginTop:14,padding:14,background:"#EDFDF4",border:"1px solid #6EE7B7",borderRadius:10}}>
-                    <div style={{fontSize:13,fontWeight:600,color:"#059669",marginBottom:10}}>✓ 영상 생성 완료!</div>
-                    {heygenResult.thumbnailUrl && <img src={heygenResult.thumbnailUrl} style={{width:"100%",borderRadius:8,marginBottom:10}} alt="thumbnail" />}
-                    <div style={{fontSize:12,color:"#555",marginBottom:10}}>{heygenResult.avatar} · {heygenResult.duration}</div>
+                  <div style={{marginTop:14,padding:14,background:C.greenBg,borderRadius:10}}>
+                    <div style={{fontSize:13,fontWeight:600,color:C.green,marginBottom:10}}>✓ 영상 생성 완료!</div>
+                    {heygenResult.thumbnailUrl && <img src={heygenResult.thumbnailUrl} style={{width:"100%",borderRadius:8,marginBottom:10}} alt="thumbnail"/>}
                     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                      <button style={{...S.btnBlack,...S.btnSm,flex:1,justifyContent:"center"}} onClick={()=>setTab("schedule")}>📅 예약하기</button>
-                      {heygenResult.videoUrl && <a href={heygenResult.videoUrl} target="_blank" rel="noreferrer" style={{...S.btnOut,...S.btnSm}}>⬇ 다운로드</a>}
+                      <button onClick={()=>setTab("schedule")} style={{flex:1,padding:"9px",borderRadius:7,border:"none",background:C.purple,color:"#fff",fontSize:12,cursor:"pointer"}}>📅 예약</button>
+                      {heygenResult.videoUrl && <a href={heygenResult.videoUrl} target="_blank" rel="noreferrer" style={{padding:"9px 14px",borderRadius:7,border:`1px solid ${C.gray200}`,fontSize:12,color:C.gray700,textDecoration:"none"}}>⬇ 다운로드</a>}
                     </div>
                     {heygenResult.videoUrl && (
-                      <div style={{marginTop:10}}>
-                        <button style={{...S.btnBlack,...S.btnSm,width:"100%",justifyContent:"center",background:"#010101",opacity:tiktokUploading?0.6:1}}
-                          onClick={()=>uploadToTikTok(heygenResult.videoUrl, gen?.hook||"")} disabled={tiktokUploading}>
-                          {tiktokUploading?"⏳ TikTok 업로드 중...":"▶ TikTok에 바로 올리기"}
+                      <div style={{marginTop:8}}>
+                        <button onClick={()=>uploadToTikTok(heygenResult.videoUrl,gen?.hook||"")} disabled={tiktokUploading}
+                          style={{width:"100%",padding:"9px",borderRadius:7,border:"none",background:"#010101",color:"#fff",fontSize:12,cursor:"pointer",opacity:tiktokUploading?0.6:1}}>
+                          {tiktokUploading?"⏳ 업로드 중...":"▶ TikTok 바로 올리기"}
                         </button>
-                        {!tiktokToken && <div style={{fontSize:11,color:"#EF4444",textAlign:"center",marginTop:4}}>↑ 먼저 TikTok 연결이 필요해요</div>}
-                        {tiktokUploadResult && <div style={{marginTop:8,padding:"8px 12px",background:"#EDFDF4",borderRadius:8,fontSize:12,color:"#059669",fontWeight:600}}>{tiktokUploadResult.status}</div>}
-                        {tiktokUploadError && <div style={{marginTop:8,padding:"8px 12px",background:"#FEF2F2",borderRadius:8,fontSize:12,color:"#DC2626"}}>⚠ {tiktokUploadError}</div>}
+                        {tiktokUploadResult && <div style={{marginTop:6,padding:"8px",background:C.greenBg,borderRadius:7,fontSize:12,color:C.green,textAlign:"center"}}>{tiktokUploadResult.status}</div>}
+                        {tiktokUploadError && <div style={{marginTop:6,padding:"8px",background:C.redBg,borderRadius:7,fontSize:12,color:C.red}}>⚠ {tiktokUploadError}</div>}
                       </div>
                     )}
                   </div>
                 )}
               </div>
-              <div style={{...S.card,borderTop:"3px solid #4F46E5"}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-                  <div style={{width:36,height:36,borderRadius:9,background:"#F0EEFF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>⚡</div>
-                  <div>
-                    <div style={{fontSize:14,fontWeight:700,color:"#111"}}>Higgsfield Cloud</div>
-                    <div style={{fontSize:11,color:"#999"}}>제품 광고 · VFX 숏츠</div>
-                  </div>
+
+              {/* Higgsfield */}
+              <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:22,borderTop:"3px solid #4F46E5"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>
+                  <div style={{width:38,height:38,borderRadius:9,background:"#F0EEFF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>⚡</div>
+                  <div><div style={{fontSize:15,fontWeight:700}}>Higgsfield Cloud</div><div style={{fontSize:11,color:C.gray400}}>제품 광고 · VFX 숏츠</div></div>
                 </div>
                 <div style={{marginBottom:14}}>
-                  <div style={S.lbl}>제작 모드</div>
+                  <div style={{fontSize:12,fontWeight:600,color:C.gray500,marginBottom:8}}>제작 모드</div>
                   <div style={{display:"flex",gap:6}}>
                     {[["product","💰 제품 광고"],["vfx","✨ VFX 숏츠"]].map(([v,l])=>(
-                      <button key={v} onClick={()=>setHiggsfieldMode(v)} style={{flex:1,padding:"9px 8px",borderRadius:9,border:"1.5px solid "+(higgsfieldMode===v?"#111":"#E8E8E4"),background:higgsfieldMode===v?"#111":"#fff",color:higgsfieldMode===v?"#fff":"#555",fontSize:12,cursor:"pointer"}}>
+                      <button key={v} onClick={()=>setHiggsfieldMode(v)} style={{flex:1,padding:"9px",borderRadius:8,border:`1.5px solid ${higgsfieldMode===v?C.gray900:C.gray200}`,background:higgsfieldMode===v?C.gray900:C.white,color:higgsfieldMode===v?"#fff":C.gray500,fontSize:12,cursor:"pointer"}}>
                         {l}
                       </button>
                     ))}
@@ -599,382 +688,287 @@ export default function App() {
                 </div>
                 {higgsfieldMode==="product" ? (
                   <div style={{marginBottom:14}}>
-                    <div style={S.lbl}>제품 URL</div>
-                    <input style={S.inp} value={productUrl} onChange={e=>setProductUrl(e.target.value)} placeholder="https://millimilli.com/products/..." />
+                    <div style={{fontSize:12,color:C.gray500,marginBottom:6}}>제품 URL</div>
+                    <input style={{width:"100%",border:`1px solid ${C.gray200}`,borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}} value={productUrl} onChange={e=>setProductUrl(e.target.value)} placeholder="https://millimilli.com/products/..." />
                   </div>
                 ) : (
                   <div style={{marginBottom:14}}>
-                    <div style={S.lbl}>VFX 프리셋</div>
+                    <div style={{fontSize:12,color:C.gray500,marginBottom:8}}>VFX 프리셋</div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
                       {VFX_PRESETS.map(v=>(
-                        <div key={v.id} onClick={()=>setSelectedVFX(v.id)} style={{padding:"10px 12px",borderRadius:9,border:"1.5px solid "+(selectedVFX===v.id?"#111":"#E8E8E4"),cursor:"pointer",background:selectedVFX===v.id?"#111":"#fff"}}>
+                        <div key={v.id} onClick={()=>setSelectedVFX(v.id)} style={{padding:"10px 12px",borderRadius:9,border:`1.5px solid ${selectedVFX===v.id?C.gray900:C.gray200}`,cursor:"pointer",background:selectedVFX===v.id?C.gray900:C.white}}>
                           <div style={{fontSize:18,marginBottom:4}}>{v.icon}</div>
-                          <div style={{fontSize:12,fontWeight:600,color:selectedVFX===v.id?"#fff":"#111"}}>{v.label}</div>
+                          <div style={{fontSize:12,fontWeight:600,color:selectedVFX===v.id?"#fff":C.gray900}}>{v.label}</div>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
-                <button style={{...S.btnBlack,width:"100%",justifyContent:"center",background:"#4F46E5"}} onClick={simulateHighsfield} disabled={higgsfieldGenerating}>
+                <button onClick={()=>{setHiggsfieldGenerating(true);setTimeout(()=>{setHiggsfieldResult({mode:higgsfieldMode==="product"?"제품 광고":"VFX 숏츠"});setHiggsfieldGenerating(false);},2000);}} disabled={higgsfieldGenerating}
+                  style={{width:"100%",padding:"11px",borderRadius:8,border:"none",background:"#4F46E5",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>
                   {higgsfieldGenerating?"생성 중...":"⚡ Higgsfield 영상 생성"}
                 </button>
                 {higgsfieldResult && (
-                  <div style={{marginTop:14,padding:14,background:"#EDFDF4",borderRadius:10}}>
-                    <div style={{fontSize:13,fontWeight:600,color:"#059669",marginBottom:8}}>✓ 완료: {higgsfieldResult.mode}</div>
-                    <button style={{...S.btnBlack,...S.btnSm,background:"#4F46E5"}} onClick={()=>setTab("schedule")}>📅 예약</button>
+                  <div style={{marginTop:14,padding:14,background:C.greenBg,borderRadius:10}}>
+                    <div style={{fontSize:13,fontWeight:600,color:C.green,marginBottom:8}}>✓ 완료: {higgsfieldResult.mode}</div>
+                    <button onClick={()=>setTab("schedule")} style={{padding:"7px 14px",borderRadius:7,border:"none",background:"#4F46E5",color:"#fff",fontSize:12,cursor:"pointer"}}>📅 예약</button>
                   </div>
                 )}
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ══ AI 스타일 ══ */}
-        {tab==="style" && (
-          <div>
-            <div style={S.title}>AI 스타일 설정</div>
-            <div style={S.sub}>버추얼 인플루언서 말투·무드·컨셉 설정</div>
-            <div style={{...S.card,marginBottom:16}}>
-              <div style={{fontSize:14,fontWeight:600,color:"#111",marginBottom:14}}>스타일 프리셋</div>
-              <div style={S.g3}>
-                {PRESETS.map(p=>(
-                  <div key={p.id} onClick={()=>{setPreset(p.id);setPersona(prev=>({...prev,vibe:p.vibe,speech:p.desc,concept:p.label}));}} style={{padding:14,borderRadius:10,border:"1.5px solid "+(preset===p.id?"#111":"#E8E8E4"),cursor:"pointer",background:preset===p.id?"#111":"#fff"}}>
-                    <div style={{fontSize:20,marginBottom:6}}>{p.icon}</div>
-                    <div style={{fontSize:13,fontWeight:600,color:preset===p.id?"#fff":"#111",marginBottom:3}}>{p.label}</div>
-                    <div style={{fontSize:11,color:preset===p.id?"rgba(255,255,255,.6)":"#999"}}>{p.desc}</div>
+          {/* ══ 콘텐츠 예약 ══ */}
+          {tab==="schedule" && (
+            <div>
+              {schedOk && <div style={{padding:"12px 16px",background:C.greenBg,borderRadius:9,marginBottom:16,fontSize:13,color:C.green}}>✓ 예약 완료! {newDate} {newTime} {FLAG[newCountry]}</div>}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
+                {/* 캘린더 */}
+                <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:20}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                    <span style={{fontWeight:700,fontSize:15}}>{calYear}년 {calMonth+1}월</span>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>{if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1);}else setCalMonth(m=>m-1);}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${C.gray200}`,background:C.white,cursor:"pointer"}}>‹</button>
+                      <button onClick={()=>{if(calMonth===11){setCalMonth(0);setCalYear(y=>y+1);}else setCalMonth(m=>m+1);}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${C.gray200}`,background:C.white,cursor:"pointer"}}>›</button>
+                    </div>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
+                    {["일","월","화","수","목","금","토"].map(d=><div key={d} style={{textAlign:"center",fontSize:11,color:C.gray400,padding:"3px 0"}}>{d}</div>)}
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+                    {Array.from({length:calDays().first}).map((_,i)=><div key={"e"+i}/>)}
+                    {Array.from({length:calDays().total}).map((_,i)=>{
+                      const day=i+1,dp=postsOnDay(day),today=new Date().getDate()===day&&new Date().getMonth()===calMonth&&new Date().getFullYear()===calYear;
+                      return <div key={day} style={{aspectRatio:"1",display:"flex",flexDirection:"column",alignItems:"center",padding:"2px 0",borderRadius:6,background:today?C.purple:"transparent"}}>
+                        <div style={{fontSize:12,color:today?"#fff":C.gray700}}>{day}</div>
+                        {dp.length>0&&<div style={{width:5,height:5,borderRadius:"50%",background:STATUS_C[dp[0].status],marginTop:1}}/>}
+                      </div>;
+                    })}
+                  </div>
+                </div>
+
+                {/* 예약 폼 */}
+                <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:20}}>
+                  <div style={{fontSize:15,fontWeight:700,marginBottom:18}}>새 예약 추가</div>
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:12,color:C.gray500,marginBottom:6}}>날짜</div>
+                    <input type="date" style={{width:"100%",border:`1px solid ${C.gray200}`,borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}} value={newDate} onChange={e=>setNewDate(e.target.value)}/>
+                  </div>
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:12,color:C.gray500,marginBottom:6}}>시간</div>
+                    <input type="time" style={{width:"100%",border:`1px solid ${C.gray200}`,borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}} value={newTime} onChange={e=>setNewTime(e.target.value)}/>
+                  </div>
+                  <div style={{marginBottom:18}}>
+                    <div style={{fontSize:12,color:C.gray500,marginBottom:8}}>타겟 국가</div>
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                      {Object.keys(FLAG).map(c=>(
+                        <button key={c} onClick={()=>setNewCountry(c)} style={{padding:"5px 8px",borderRadius:6,border:`1.5px solid ${newCountry===c?C.purple:C.gray200}`,background:newCountry===c?C.purpleBg:C.white,fontSize:15,cursor:"pointer"}}>
+                          {FLAG[c]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button onClick={()=>{if(!newDate)return;setPosts(p=>[...p,{id:Date.now(),title:gen?.hook?.slice(0,40)||"새 콘텐츠",date:newDate,time:newTime,country:newCountry,status:"scheduled",thumb:"📅"}]);setSchedOk(true);setTimeout(()=>setSchedOk(false),3000);}} disabled={!newDate}
+                    style={{width:"100%",padding:"11px",borderRadius:8,border:"none",background:newDate?C.purple:C.gray200,color:newDate?"#fff":C.gray400,fontSize:14,fontWeight:600,cursor:"pointer"}}>
+                    예약 확정
+                  </button>
+                </div>
+              </div>
+
+              {/* 예약 목록 */}
+              <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:20}}>
+                <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>예약 현황</div>
+                {posts.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(p=>(
+                  <div key={p.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:`1px solid ${C.gray100}`}}>
+                    <div style={{width:40,height:40,borderRadius:9,background:C.gray100,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{p.thumb}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title}</div>
+                      <div style={{fontSize:11,color:C.gray400,marginTop:2}}>{p.date} {p.time} · {FLAG[p.country]}</div>
+                    </div>
+                    <span style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:500,background:p.status==="published"?C.greenBg:p.status==="scheduled"?C.purpleBg:C.gray100,color:STATUS_C[p.status]}}>{STATUS_L[p.status]}</span>
+                    {p.status==="scheduled"&&<button onClick={()=>setPosts(prev=>prev.filter(x=>x.id!==p.id))} style={{padding:"5px 10px",borderRadius:6,border:`1px solid #FCA5A5`,background:C.redBg,color:C.red,fontSize:11,cursor:"pointer"}}>취소</button>}
                   </div>
                 ))}
               </div>
             </div>
-            <div style={S.g2}>
-              <div>
-                <div style={{...S.card,padding:0,marginBottom:12}}>
-                  <div style={{padding:"13px 17px",borderBottom:"1px solid #E8E8E4",fontSize:13,fontWeight:600,color:"#111"}}>채팅으로 설정</div>
-                  <div ref={chatRef} style={{height:240,overflowY:"auto",padding:14,display:"flex",flexDirection:"column",gap:8}}>
-                    {chatMsgs.map((m,i)=>(
-                      <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}>
-                        <div style={{maxWidth:"80%",padding:"9px 13px",borderRadius:m.role==="user"?"12px 12px 2px 12px":"12px 12px 12px 2px",background:m.role==="user"?"#111":"#F5F5F2",color:m.role==="user"?"#fff":"#111",fontSize:13,lineHeight:1.7}}>
-                          {m.text}
+          )}
+
+          {/* ══ 콘텐츠 관리 ══ */}
+          {tab==="manage" && (
+            <div>
+              <div style={{display:"flex",gap:6,marginBottom:16}}>
+                {["all","scheduled","published","draft"].map(f=>(
+                  <button key={f} onClick={()=>setMgmtFilter(f)} style={{padding:"7px 16px",borderRadius:20,border:`1px solid ${mgmtFilter===f?C.purple:C.gray200}`,background:mgmtFilter===f?C.purpleBg:C.white,color:mgmtFilter===f?C.purple:C.gray500,fontSize:13,cursor:"pointer"}}>
+                    {f==="all"?"전체":STATUS_L[f]} <span style={{fontWeight:600}}>{f==="all"?posts.length:posts.filter(p=>p.status===f).length}</span>
+                  </button>
+                ))}
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {posts.filter(p=>mgmtFilter==="all"||p.status===mgmtFilter).map(p=>(
+                  <div key={p.id} style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:18}}>
+                    {editingId===p.id ? (
+                      <div>
+                        <input style={{width:"100%",border:`1px solid ${C.gray200}`,borderRadius:8,padding:"9px 12px",fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:10}} defaultValue={p.title} onBlur={e=>setPosts(prev=>prev.map(x=>x.id===p.id?{...x,title:e.target.value}:x))}/>
+                        <div style={{display:"flex",gap:8}}>
+                          <input type="date" style={{flex:1,border:`1px solid ${C.gray200}`,borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}} defaultValue={p.date} onBlur={e=>setPosts(prev=>prev.map(x=>x.id===p.id?{...x,date:e.target.value}:x))}/>
+                          <button onClick={()=>setEditingId(null)} style={{padding:"9px 16px",borderRadius:8,border:"none",background:C.purple,color:"#fff",fontSize:13,cursor:"pointer"}}>저장</button>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                  <div style={{padding:10,borderTop:"1px solid #E8E8E4",display:"flex",gap:8}}>
-                    <input style={{...S.inp,flex:1}} value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyPress={e=>e.key==="Enter"&&sendChat()} placeholder="메시지 입력..." />
-                    <button style={{...S.btnBlack,...S.btnSm}} onClick={sendChat} disabled={!chatInput.trim()}>전송</button>
-                  </div>
-                </div>
-                <div style={S.cardSm}>
-                  <div style={S.lbl}>레퍼런스 계정 분석</div>
-                  <div style={{display:"flex",gap:8}}>
-                    <input style={{...S.inp,flex:1}} value={refUrl} onChange={e=>setRefUrl(e.target.value)} placeholder="https://www.tiktok.com/@username" />
-                    <button style={{...S.btnOut,...S.btnSm}} onClick={()=>setAnalyzing(p=>!p)} disabled={analyzing}>{analyzing?"분석 중":"분석"}</button>
-                  </div>
-                </div>
-              </div>
-              <div style={S.card}>
-                <div style={{fontSize:14,fontWeight:600,color:"#111",marginBottom:14}}>캐릭터 프리뷰</div>
-                <div style={{textAlign:"center",marginBottom:18}}>
-                  <div style={{width:56,height:56,borderRadius:"50%",background:"#111",margin:"0 auto 10px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:"#fff"}}>✦</div>
-                  <div style={{fontWeight:800,fontSize:17,color:"#111"}}>{persona.name||"미설정"}</div>
-                  <div style={{fontSize:12,color:"#999",marginTop:3}}>{persona.country} · {persona.age}</div>
-                </div>
-                {Object.entries(persona).filter(([k])=>!["country","age"].includes(k)).map(([k,v])=>(
-                  <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid #E8E8E4"}}>
-                    <span style={{fontSize:11,color:"#999",textTransform:"uppercase"}}>{k}</span>
-                    <span style={{fontSize:12,color:"#111",fontWeight:500,maxWidth:"60%",textAlign:"right"}}>{v}</span>
+                    ) : (
+                      <div style={{display:"flex",alignItems:"center",gap:14}}>
+                        <div style={{width:44,height:44,borderRadius:10,background:C.gray100,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{p.thumb}</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:14,fontWeight:600,marginBottom:2}}>{p.title}</div>
+                          <div style={{fontSize:11,color:C.gray400}}>{p.date} · {FLAG[p.country]}</div>
+                        </div>
+                        <span style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:500,background:p.status==="published"?C.greenBg:p.status==="scheduled"?C.purpleBg:C.gray100,color:STATUS_C[p.status]}}>{STATUS_L[p.status]}</span>
+                        <div style={{display:"flex",gap:6}}>
+                          {p.status!=="published"&&<button onClick={()=>setEditingId(p.id)} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${C.gray200}`,background:C.white,fontSize:12,cursor:"pointer"}}>편집</button>}
+                          {p.status==="draft"&&<button onClick={()=>setPosts(prev=>prev.map(x=>x.id===p.id?{...x,status:"scheduled"}:x))} style={{padding:"6px 12px",borderRadius:6,border:"none",background:C.purple,color:"#fff",fontSize:12,cursor:"pointer"}}>예약</button>}
+                          <button onClick={()=>setPosts(prev=>prev.filter(x=>x.id!==p.id))} style={{padding:"6px 12px",borderRadius:6,border:`1px solid #FCA5A5`,background:C.redBg,color:C.red,fontSize:12,cursor:"pointer"}}>삭제</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ══ 콘텐츠 예약 ══ */}
-        {tab==="schedule" && (
-          <div>
-            <div style={S.title}>콘텐츠 예약</div>
-            <div style={S.sub}>예약 캘린더를 확인하고 게시 시간을 설정하세요</div>
-            {schedOk && (
-              <div style={{padding:"11px 16px",background:"#EDFDF4",border:"1px solid #6EE7B7",borderRadius:9,marginBottom:16,fontSize:13,color:"#065F46"}}>
-                ✓ 예약 완료! {newDate} {newTime} {FLAG[newCountry]}
+          {/* ══ 성과 분석 ══ */}
+          {tab==="perf" && (
+            <div>
+              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:20}}>
+                <div style={{display:"flex",gap:3,background:C.gray100,padding:3,borderRadius:9}}>
+                  {[["7d","7일"],["30d","30일"],["90d","90일"]].map(([v,l])=>(
+                    <button key={v} onClick={()=>setPeriod(v)} style={{padding:"6px 16px",borderRadius:7,fontSize:12,background:period===v?C.white:"transparent",color:period===v?C.gray900:C.gray400,border:"none",cursor:"pointer",fontWeight:period===v?600:400}}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
               </div>
-            )}
-            <div style={{...S.g2,marginBottom:16}}>
-              <div style={S.card}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                  <span style={{fontWeight:600,fontSize:14}}>{calYear}년 {calMonth+1}월</span>
-                  <div style={{display:"flex",gap:6}}>
-                    <button style={{...S.btnOut,...S.btnSm}} onClick={()=>{if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1);}else setCalMonth(m=>m-1);}}>‹</button>
-                    <button style={{...S.btnOut,...S.btnSm}} onClick={()=>{if(calMonth===11){setCalMonth(0);setCalYear(y=>y+1);}else setCalMonth(m=>m+1);}}>›</button>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}}>
+                {[["👁","조회수",PERF_DATA[period].views],["♥","좋아요",PERF_DATA[period].likes],["💬","댓글",PERF_DATA[period].comments],["✦","팔로워",PERF_DATA[period].followers]].map(([icon,label,val],i)=>(
+                  <div key={i} style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:20,textAlign:"center"}}>
+                    <div style={{fontSize:24,marginBottom:8}}>{icon}</div>
+                    <div style={{fontSize:24,fontWeight:800,color:C.gray900}}>{val}</div>
+                    <div style={{fontSize:12,color:C.gray400,marginTop:4}}>{label}</div>
                   </div>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
-                  {["일","월","화","수","목","금","토"].map(d=><div key={d} style={{textAlign:"center",fontSize:11,color:"#999",padding:"3px 0"}}>{d}</div>)}
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
-                  {Array.from({length:calDays().first}).map((_,i)=><div key={"e"+i} />)}
-                  {Array.from({length:calDays().total}).map((_,i)=>{
-                    const day=i+1,dp=postsOnDay(day),today=new Date().getDate()===day&&new Date().getMonth()===calMonth&&new Date().getFullYear()===calYear;
-                    return (
-                      <div key={day} style={{aspectRatio:"1",display:"flex",flexDirection:"column",alignItems:"center",padding:"2px 0",borderRadius:6,background:today?"#111":"transparent"}}>
-                        <div style={{fontSize:12,color:today?"#fff":"#444"}}>{day}</div>
-                        {dp.length>0 && <div style={{width:6,height:6,borderRadius:"50%",background:STATUS_C[dp[0].status],marginTop:1}} />}
+                ))}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+                <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:20}}>
+                  <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>TOP 콘텐츠</div>
+                  {posts.map((p,i)=>(
+                    <div key={p.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:i<posts.length-1?`1px solid ${C.gray100}`:"none"}}>
+                      <div style={{fontSize:14,fontWeight:700,color:C.gray200,width:20}}>#{i+1}</div>
+                      <div style={{width:34,height:34,borderRadius:8,background:C.gray100,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{p.thumb}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title}</div>
+                        <div style={{fontSize:11,color:C.gray400}}>{FLAG[p.country]} {p.date}</div>
                       </div>
-                    );
-                  })}
+                      {i===0&&<span style={{padding:"2px 8px",borderRadius:20,background:"#FEF3C7",color:C.amber,fontSize:11,fontWeight:500}}>🔥 Best</span>}
+                    </div>
+                  ))}
+                </div>
+                <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:20}}>
+                  <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>AI 인사이트</div>
+                  {[{q:"가장 반응 좋은 유형은?",a:PERF_DATA[period].top+" 스타일 — 참여율 2.3배"},{q:"최적 게시 시간은?",a:"오전 8-9시 & 저녁 9-10시"},{q:"성장 포인트는?",a:"팔로워 "+PERF_DATA[period].followers+" · 글로벌 도달 32% 상승"}].map((ins,i)=>(
+                    <div key={i} style={{padding:"12px 0",borderBottom:i<2?`1px solid ${C.gray100}`:"none"}}>
+                      <div style={{fontSize:11,color:C.gray400,marginBottom:4}}>Q. {ins.q}</div>
+                      <div style={{fontSize:13,color:C.gray700,lineHeight:1.6}}>{ins.a}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <div style={S.card}>
-                <div style={{fontSize:14,fontWeight:600,color:"#111",marginBottom:16}}>새 예약 추가</div>
-                <div style={{marginBottom:12}}>
-                  <div style={S.lbl}>날짜</div>
-                  <input type="date" style={S.inp} value={newDate} onChange={e=>setNewDate(e.target.value)} />
-                </div>
-                <div style={{marginBottom:12}}>
-                  <div style={S.lbl}>시간</div>
-                  <input type="time" style={S.inp} value={newTime} onChange={e=>setNewTime(e.target.value)} />
-                </div>
-                <div style={{marginBottom:14}}>
-                  <div style={S.lbl}>타겟 국가</div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {Object.keys(FLAG).map(c=>(
-                      <button key={c} onClick={()=>setNewCountry(c)} style={{padding:"5px 8px",borderRadius:7,border:"1.5px solid "+(newCountry===c?"#111":"#DDDDD8"),background:newCountry===c?"#111":"#fff",fontSize:15,cursor:"pointer"}}>
-                        {FLAG[c]}
+            </div>
+          )}
+
+          {/* ══ 댓글 관리 ══ */}
+          {tab==="comments" && (
+            <div>
+              <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:20}}>
+                <span style={{padding:"4px 12px",borderRadius:20,background:"#FFF0F5",color:"#C4267D",fontSize:12,fontWeight:500}}>💰 {comments.filter(c=>c.type==="sales"&&c.status==="pending").length} 판매문의</span>
+                <span style={{padding:"4px 12px",borderRadius:20,background:C.amberBg,color:C.amber,fontSize:12,fontWeight:500}}>⏳ {comments.filter(c=>c.status==="pending").length} 미답변</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
+                <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:20}}>
+                  <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>자동화 설정</div>
+                  {[{key:"simple",label:"단순 댓글 AI 자동 답글",sub:"AI가 즉시 처리"},{key:"negative",label:"악성 댓글 자동 숨기기",sub:"브랜드 보호"},{key:"sales",label:"판매 문의 즉시 알림",sub:"골든타임"}].map((s,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 0",borderBottom:i<2?`1px solid ${C.gray100}`:"none"}}>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:500}}>{s.label}</div>
+                        <div style={{fontSize:11,color:C.gray400,marginTop:2}}>{s.sub}</div>
+                      </div>
+                      <button onClick={()=>setAuto(p=>({...p,[s.key]:!p[s.key]}))}
+                        style={{width:42,height:23,borderRadius:12,background:auto[s.key]?C.purple:C.gray200,position:"relative",cursor:"pointer",border:"none"}}>
+                        <div style={{width:17,height:17,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:auto[s.key]?22:3,transition:"left .2s"}}/>
                       </button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:20}}>
+                  <div style={{fontSize:15,fontWeight:700,marginBottom:14}}>이번 주 현황</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+                    {[["전체",comments.length,C.gray900],["판매",comments.filter(c=>c.type==="sales").length,"#C4267D"],["자동처리",comments.filter(c=>c.status==="auto_replied").length,C.green],["완료",comments.filter(c=>c.replied).length,C.purple]].map(([l,v,c],i)=>(
+                      <div key={i} style={{background:C.gray50,borderRadius:10,padding:"13px 16px"}}>
+                        <div style={{fontSize:11,color:C.gray400,marginBottom:3}}>{l}</div>
+                        <div style={{fontSize:22,fontWeight:700,color:c}}>{v}</div>
+                      </div>
                     ))}
                   </div>
+                  <div style={{fontSize:12,color:C.gray400,marginBottom:8}}>빠른 답글 템플릿</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {templates.map(t=><button key={t.id} onClick={()=>setReplyText(t.text)} style={{padding:"5px 11px",borderRadius:6,border:`1px solid ${C.gray200}`,background:C.white,fontSize:11,color:C.gray700,cursor:"pointer"}}>{t.label}</button>)}
+                  </div>
                 </div>
-                <div style={{marginBottom:14}}>
-                  <button style={{...S.btnOut,...S.btnSm,width:"100%",justifyContent:"space-between",display:"flex"}} onClick={()=>setPostTextOpen(p=>!p)}>
-                    <span>📝 게시 텍스트 설정</span><span>{postTextOpen?"▲":"▼"}</span>
-                  </button>
-                  {postTextOpen && (
-                    <div style={{border:"1px solid #E8E8E4",borderRadius:10,padding:14,marginTop:8}}>
-                      <div style={{marginBottom:10}}>
-                        <div style={S.lbl}>캡션</div>
-                        <textarea style={{...S.inp,minHeight:56,resize:"vertical",display:"block"}} value={postText.caption} onChange={e=>setPostText(p=>({...p,caption:e.target.value}))} placeholder="캡션 입력..." />
-                      </div>
-                      <div>
-                        <div style={S.lbl}>해시태그</div>
-                        <input style={S.inp} value={postText.hashtags} onChange={e=>setPostText(p=>({...p,hashtags:e.target.value}))} placeholder="#kbeauty #skincare #뷰티" />
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+                <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:20}}>
+                  <div style={{fontSize:15,fontWeight:700,marginBottom:14}}>댓글 목록</div>
+                  {comments.map(c=>(
+                    <div key={c.id} onClick={()=>setSelectedComment(c)} style={{padding:"12px 0",borderBottom:`1px solid ${C.gray100}`,cursor:"pointer",background:selectedComment?.id===c.id?C.gray50:"transparent"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+                        <div style={{flex:1}}>
+                          <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
+                            <span style={{fontSize:12,fontWeight:600}}>{c.user}</span>
+                            <span style={{padding:"2px 7px",borderRadius:20,fontSize:10,fontWeight:500,background:c.type==="sales"?"#FFF0F5":c.type==="negative"?C.amberBg:C.greenBg,color:c.type==="sales"?"#C4267D":c.type==="negative"?C.amber:C.green}}>
+                              {c.type==="sales"?"💰 판매":c.type==="negative"?"⚠ 부정":"👍 긍정"}
+                            </span>
+                          </div>
+                          <div style={{fontSize:13,color:C.gray500,lineHeight:1.5}}>{c.text}</div>
+                        </div>
+                        {c.replied&&<div style={{color:C.green,fontSize:11,flexShrink:0}}>✓</div>}
                       </div>
                     </div>
-                  )}
+                  ))}
                 </div>
-                <button style={{...S.btnBlack,width:"100%",justifyContent:"center"}} onClick={addSchedule} disabled={!newDate}>예약 확정</button>
-              </div>
-            </div>
-            <div style={S.card}>
-              <div style={{fontSize:14,fontWeight:600,color:"#111",marginBottom:14}}>예약 현황</div>
-              {posts.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(p=>postRow(p,
-                p.status==="scheduled"&&<button style={{...S.btnOut,...S.btnSm,color:"#DC2626",borderColor:"#FCA5A5"}} onClick={()=>setPosts(prev=>prev.filter(x=>x.id!==p.id))}>취소</button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ══ 콘텐츠 관리 ══ */}
-        {tab==="manage" && (
-          <div>
-            <div style={S.title}>콘텐츠 관리</div>
-            <div style={S.sub}>게시된 콘텐츠를 한눈에 보고 관리하세요</div>
-            <div style={{display:"flex",gap:6,marginBottom:16}}>
-              {["all","scheduled","published","draft"].map(f=>(
-                <button key={f} onClick={()=>setMgmtFilter(f)} style={{padding:"6px 14px",borderRadius:20,border:"1px solid "+(mgmtFilter===f?"#111":"#DDDDD8"),background:mgmtFilter===f?"#111":"#fff",color:mgmtFilter===f?"#fff":"#555",fontSize:12,cursor:"pointer"}}>
-                  {f==="all"?"전체":STATUS_L[f]} {f==="all"?posts.length:posts.filter(p=>p.status===f).length}
-                </button>
-              ))}
-            </div>
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {posts.filter(p=>mgmtFilter==="all"||p.status===mgmtFilter).map(p=>(
-                <div key={p.id} style={S.card}>
-                  {editingId===p.id ? (
+                <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:20}}>
+                  <div style={{fontSize:15,fontWeight:700,marginBottom:14}}>{selectedComment?"@"+selectedComment.user+" 답글":"댓글을 선택하세요"}</div>
+                  {selectedComment ? (
                     <div>
-                      <input style={{...S.inp,marginBottom:10}} defaultValue={p.title} onBlur={e=>setPosts(prev=>prev.map(x=>x.id===p.id?{...x,title:e.target.value}:x))} />
+                      <div style={{padding:"10px 12px",background:C.gray50,borderRadius:9,fontSize:13,color:C.gray500,marginBottom:14,lineHeight:1.6}}>{selectedComment.text}</div>
+                      <textarea style={{width:"100%",border:`1px solid ${C.gray200}`,borderRadius:8,padding:"10px 12px",fontSize:13,minHeight:80,resize:"vertical",outline:"none",boxSizing:"border-box",marginBottom:10}} value={replyText} onChange={e=>setReplyText(e.target.value)} placeholder="답글 입력..."/>
+                      <div style={{display:"flex",gap:8,marginBottom:8}}>
+                        <button onClick={genAiReply} disabled={aiReplying} style={{flex:1,padding:"9px",borderRadius:7,border:`1px solid ${C.purpleBorder}`,background:C.purpleBg,color:C.purple,fontSize:12,cursor:"pointer"}}>{aiReplying?"생성 중...":"✦ AI 답글 생성"}</button>
+                      </div>
                       <div style={{display:"flex",gap:8}}>
-                        <input type="date" style={{...S.inp,flex:1}} defaultValue={p.date} onBlur={e=>setPosts(prev=>prev.map(x=>x.id===p.id?{...x,date:e.target.value}:x))} />
-                        <button style={{...S.btnBlack,...S.btnSm}} onClick={()=>setEditingId(null)}>저장</button>
+                        <button onClick={()=>{setComments(prev=>prev.map(x=>x.id===selectedComment.id?{...x,replied:true}:x));setReplyText("");setSelectedComment(null);}} style={{flex:1,padding:"9px",borderRadius:7,border:"none",background:C.purple,color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>답글 달기</button>
+                        <button onClick={()=>setComments(prev=>prev.map(x=>x.id===selectedComment.id?{...x,status:"hidden"}:x))} style={{padding:"9px 14px",borderRadius:7,border:`1px solid ${C.gray200}`,background:C.white,fontSize:12,cursor:"pointer"}}>숨기기</button>
                       </div>
                     </div>
                   ) : (
-                    <div style={{display:"flex",alignItems:"center",gap:14}}>
-                      <div style={{width:42,height:42,borderRadius:10,background:"#F5F5F2",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{p.thumb}</div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:14,fontWeight:600,color:"#111",marginBottom:2}}>{p.title}</div>
-                        <div style={{fontSize:11,color:"#999"}}>{p.date} · {FLAG[p.country]}</div>
-                      </div>
-                      <span style={S.badge(p.status==="published"?"green":p.status==="scheduled"?"purple":"gray")}>{STATUS_L[p.status]}</span>
-                      <div style={{display:"flex",gap:6}}>
-                        {p.status!=="published"&&<button style={{...S.btnOut,...S.btnSm}} onClick={()=>setEditingId(p.id)}>편집</button>}
-                        {p.status==="draft"&&<button style={{...S.btnBlack,...S.btnSm}} onClick={()=>setPosts(prev=>prev.map(x=>x.id===p.id?{...x,status:"scheduled"}:x))}>예약</button>}
-                        <button style={{...S.btnOut,...S.btnSm,color:"#DC2626",borderColor:"#FCA5A5"}} onClick={()=>setPosts(prev=>prev.filter(x=>x.id!==p.id))}>삭제</button>
-                      </div>
+                    <div style={{textAlign:"center",padding:"40px 0",color:C.gray200}}>
+                      <div style={{fontSize:32,marginBottom:10}}>💬</div>
+                      <div style={{fontSize:13,color:C.gray400}}>왼쪽에서 댓글을 선택하세요</div>
                     </div>
                   )}
                 </div>
-              ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ══ 성과 ══ */}
-        {tab==="perf" && (
-          <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:22}}>
-              <div>
-                <div style={S.title}>콘텐츠 성과</div>
-                <div style={S.sub}>채널 성장과 콘텐츠 효과를 확인하세요</div>
-              </div>
-              <div style={{display:"flex",gap:3,background:"#EEEEE9",padding:3,borderRadius:9}}>
-                {[["7d","7일"],["30d","30일"],["90d","90일"]].map(([v,l])=>(
-                  <button key={v} onClick={()=>setPeriod(v)} style={{padding:"6px 13px",borderRadius:7,fontSize:12,background:period===v?"#fff":"transparent",color:period===v?"#111":"#888",border:"none",cursor:"pointer"}}>
-                    {l}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div style={{...S.g4,marginBottom:16}}>
-              {[["👁","조회수",PERF_DATA[period].views],["♥","좋아요",PERF_DATA[period].likes],["💬","댓글",PERF_DATA[period].comments],["✦","팔로워",PERF_DATA[period].followers]].map(([icon,label,val],i)=>(
-                <div key={i} style={{...S.card,textAlign:"center"}}>
-                  <div style={{fontSize:22,marginBottom:8}}>{icon}</div>
-                  <div style={{fontSize:22,fontWeight:800,color:"#111"}}>{val}</div>
-                  <div style={{fontSize:12,color:"#333",marginTop:4}}>{label}</div>
-                </div>
-              ))}
-            </div>
-            <div style={S.g2}>
-              <div style={S.card}>
-                <div style={{fontSize:14,fontWeight:600,color:"#111",marginBottom:14}}>TOP 콘텐츠</div>
-                {posts.map((p,i)=>(
-                  <div key={p.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:i<posts.length-1?"1px solid #E8E8E4":"none"}}>
-                    <div style={{fontSize:14,fontWeight:700,color:"#DDD",width:20}}>#{i+1}</div>
-                    <div style={{width:34,height:34,borderRadius:8,background:"#F5F5F2",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{p.thumb}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:500,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title}</div>
-                      <div style={{fontSize:11,color:"#999"}}>{FLAG[p.country]} {p.date}</div>
-                    </div>
-                    {i===0&&<span style={S.badge("pink")}>🔥 Best</span>}
-                  </div>
-                ))}
-              </div>
-              <div style={S.card}>
-                <div style={{fontSize:14,fontWeight:600,color:"#111",marginBottom:14}}>AI 인사이트</div>
-                {[
-                  {q:"가장 반응 좋은 유형은?",a:PERF_DATA[period].top+" 스타일 — 참여율 2.3배"},
-                  {q:"최적 게시 시간은?",a:"오전 8-9시 & 저녁 9-10시"},
-                  {q:"성장 포인트는?",a:"팔로워 "+PERF_DATA[period].followers+" · 글로벌 도달 32% 상승"},
-                ].map((ins,i)=>(
-                  <div key={i} style={{padding:"11px 0",borderBottom:i<2?"1px solid #E8E8E4":"none"}}>
-                    <div style={{fontSize:11,color:"#999",marginBottom:4}}>Q. {ins.q}</div>
-                    <div style={{fontSize:13,color:"#111",lineHeight:1.6}}>{ins.a}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ══ 댓글 관리 ══ */}
-        {tab==="comments" && (
-          <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:22}}>
-              <div>
-                <div style={S.title}>댓글 관리</div>
-                <div style={S.sub}>AI 자동 답글 · 판매 문의 골든타임 · 악성 댓글 관리</div>
-              </div>
-              <div style={{display:"flex",gap:8}}>
-                <span style={S.badge("pink")}>💰 {comments.filter(c=>c.type==="sales"&&c.status==="pending").length} 판매문의</span>
-                <span style={S.badge("amber")}>⏳ {comments.filter(c=>c.status==="pending").length} 미답변</span>
-              </div>
-            </div>
-            <div style={{...S.g2,marginBottom:16}}>
-              <div style={S.card}>
-                <div style={{fontSize:14,fontWeight:600,color:"#111",marginBottom:14}}>자동화 설정</div>
-                {[
-                  {key:"simple",label:"단순 댓글 AI 자동 답글",sub:"AI가 즉시 처리"},
-                  {key:"negative",label:"악성 댓글 자동 숨기기",sub:"브랜드 보호"},
-                  {key:"sales",label:"판매 문의 즉시 알림",sub:"골든타임"},
-                ].map((s,i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 0",borderBottom:i<2?"1px solid #E8E8E4":"none"}}>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:500,color:"#111"}}>{s.label}</div>
-                      <div style={{fontSize:11,color:"#999",marginTop:2}}>{s.sub}</div>
-                    </div>
-                    <button style={S.toggle(auto[s.key])} onClick={()=>setAuto(p=>({...p,[s.key]:!p[s.key]}))}>
-                      <div style={S.knob(auto[s.key])} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div style={S.card}>
-                <div style={{fontSize:14,fontWeight:600,color:"#111",marginBottom:14}}>이번 주 현황</div>
-                <div style={S.g2}>
-                  {[["전체",comments.length,"#111"],["판매",comments.filter(c=>c.type==="sales").length,"#C4267D"],["자동처리",comments.filter(c=>c.status==="auto_replied").length,"#059669"],["완료",comments.filter(c=>c.replied).length,"#4F46E5"]].map(([l,v,c],i)=>(
-                    <div key={i} style={{background:"#F7F7F5",borderRadius:10,padding:"13px 16px"}}>
-                      <div style={{fontSize:11,color:"#999",marginBottom:3}}>{l}</div>
-                      <div style={{fontSize:22,fontWeight:700,color:c}}>{v}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={S.divider} />
-                <div style={S.lbl}>빠른 답글 템플릿</div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  {templates.map(t=>(
-                    <button key={t.id} style={{...S.btnOut,...S.btnSm}} onClick={()=>setReplyText(t.text)}>{t.label}</button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div style={S.g2}>
-              <div style={S.card}>
-                <div style={{fontSize:14,fontWeight:600,color:"#111",marginBottom:14}}>댓글 목록</div>
-                {comments.map(c=>(
-                  <div key={c.id} onClick={()=>setSelectedComment(c)} style={{padding:"12px 0",borderBottom:"1px solid #E8E8E4",cursor:"pointer"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                      <div style={{flex:1}}>
-                        <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
-                          <span style={{fontSize:12,fontWeight:600,color:"#111"}}>{c.user}</span>
-                          <span style={S.badge(c.type==="sales"?"pink":c.type==="negative"?"amber":"green")}>{c.type==="sales"?"💰 판매":c.type==="negative"?"⚠ 부정":"👍 긍정"}</span>
-                        </div>
-                        <div style={{fontSize:13,color:"#444",lineHeight:1.5}}>{c.text}</div>
-                      </div>
-                      {c.replied&&<div style={{color:"#059669",fontSize:11}}>✓</div>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div style={S.card}>
-                <div style={{fontSize:14,fontWeight:600,color:"#111",marginBottom:14}}>
-                  {selectedComment ? "@"+selectedComment.user+" 답글" : "댓글을 선택하세요"}
-                </div>
-                {selectedComment ? (
-                  <div>
-                    <div style={{padding:"10px 12px",background:"#F7F7F5",borderRadius:9,fontSize:13,color:"#555",marginBottom:14,lineHeight:1.6}}>
-                      {selectedComment.text}
-                    </div>
-                    <textarea style={{...S.inp,minHeight:80,resize:"vertical",display:"block",marginBottom:10}} value={replyText} onChange={e=>setReplyText(e.target.value)} placeholder="답글 입력..." />
-                    <div style={{display:"flex",gap:8,marginBottom:10}}>
-                      <button style={{...S.btnBlack,...S.btnSm,flex:1,justifyContent:"center"}} onClick={genAiReply} disabled={aiReplying}>
-                        {aiReplying?"생성 중...":"✦ AI 답글 생성"}
-                      </button>
-                    </div>
-                    <div style={{display:"flex",gap:8}}>
-                      <button style={{...S.btnBlack,flex:1,justifyContent:"center"}} onClick={()=>{setComments(prev=>prev.map(x=>x.id===selectedComment.id?{...x,replied:true}:x));setReplyText("");setSelectedComment(null);}}>답글 달기</button>
-                      <button style={{...S.btnOut,...S.btnSm}} onClick={()=>setComments(prev=>prev.map(x=>x.id===selectedComment.id?{...x,status:"hidden"}:x))}>숨기기</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{textAlign:"center",padding:"40px 0",color:"#CCC"}}>
-                    <div style={{fontSize:32,marginBottom:10}}>💬</div>
-                    <div style={{fontSize:13}}>왼쪽에서 댓글을 선택하세요</div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
+        </div>
       </div>
     </div>
   );
