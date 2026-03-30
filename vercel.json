@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/heygen/v1/asset", "destination": "https://upload.heygen.com/v1/asset" },
     { "source": "/heygen/(.*)", "destination": "https://api.heygen.com/$1" },
     { "source": "/tiktok/(.*)", "destination": "https://open.tiktokapis.com/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
