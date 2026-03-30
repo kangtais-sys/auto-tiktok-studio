@@ -279,21 +279,32 @@ export default function App() {
       const videoId = data.data?.video_id;
       if(!videoId) throw new Error("video_id 없음");
 
+      // video_id 저장하고 대기 화면으로
+      localStorage.setItem("pending_video_id", videoId);
+      localStorage.setItem("pending_video_key", HEYGEN_KEY);
+      setHeygenProgress(50);
+      
+      // 최대 10분 대기
       let attempts = 0;
       const timer = setInterval(async()=>{
         try {
           const sr = await fetch("/heygen/v1/video_status.get?video_id="+videoId,{headers:{"X-Api-Key":HEYGEN_KEY}});
           const sd = await sr.json();
-          setHeygenProgress(Math.min(38+attempts*4,92));
+          setHeygenProgress(Math.min(50+attempts*3,95));
           if(sd.data?.status==="completed"){
             clearInterval(timer);
+            localStorage.removeItem("pending_video_id");
             setHeygenResult({videoUrl:sd.data?.video_url,thumbnailUrl:sd.data?.thumbnail_url});
             setMakeStep(5);
           } else if(sd.data?.status==="failed"){
             clearInterval(timer); throw new Error("영상 생성 실패");
           }
           attempts++;
-          if(attempts>72){ clearInterval(timer); throw new Error("시간 초과 (6분)"); }
+          if(attempts>120){ 
+            clearInterval(timer);
+            setHeygenError("시간 초과 — app.heygen.com에서 영상 확인하세요");
+            setMakeStep(3);
+          }
         } catch(e){ clearInterval(timer); setHeygenError(e.message); setMakeStep(3); }
       },5000);
     } catch(e){ setHeygenError(e.message); setMakeStep(3); }
