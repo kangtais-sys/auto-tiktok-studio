@@ -210,26 +210,24 @@ export default function App() {
 
   // HeyGen 영상 생성
   // base64 이미지 → HeyGen 업로드 → asset id
-  const uploadPhotoToHeygen = async (base64, HEYGEN_KEY) => {
-    const mime = base64.includes("image/png") ? "image/png" : "image/jpeg";
-    const ext = mime === "image/png" ? "png" : "jpg";
-    const byteStr = atob(base64.split(",")[1]);
-    const ab = new ArrayBuffer(byteStr.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
-    const blob = new Blob([ab], { type: mime });
-    const fd = new FormData();
-    fd.append("file", blob, `photo.${ext}`);
-    fd.append("content_type", mime);
+    const uploadPhotoToHeygen = async (base64, HEYGEN_KEY) => {
     const r = await fetch("https://upload.heygen.com/v1/asset", {
       method: "POST",
-      headers: { "X-Api-Key": HEYGEN_KEY, "Accept": "application/json" },
-      body: fd
+      headers: {
+        "X-Api-Key": HEYGEN_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        data: base64.split(",")[1],
+        type: "image",
+        name: "photo.jpg",
+        file_type: base64.includes("image/png") ? "image/png" : "image/jpeg",
+      })
     });
     const text = await r.text();
     let d;
-    try { d = JSON.parse(text); } catch(e) { throw new Error("응답 파싱 실패: " + text.slice(0,100)); }
-    if (!d.data?.id) throw new Error("사진 업로드 실패: " + JSON.stringify(d));
+    try { d = JSON.parse(text); } catch(e) { throw new Error("파싱실패: " + text.slice(0,200)); }
+    if (!d.data?.id) throw new Error("업로드실패: " + JSON.stringify(d));
     return d.data.id;
   };
 
