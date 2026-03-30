@@ -235,7 +235,7 @@ export default function App() {
             clearInterval(timer); throw new Error("영상 생성 실패");
           }
           attempts++;
-          if(attempts>36){ clearInterval(timer); throw new Error("시간 초과"); }
+          if(attempts>60){ clearInterval(timer); throw new Error("시간 초과"); }
         } catch(e){ clearInterval(timer); setHeygenError(e.message); setMakeStep(3); }
       },5000);
     } catch(e){ setHeygenError(e.message); setMakeStep(3); }
