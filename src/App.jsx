@@ -108,8 +108,9 @@ export default function App() {
 
   // Style
   const [facePhoto, setFacePhoto] = useState(null);
-  const [outfitPhoto, setOutfitPhoto] = useState(null);
   const [bgPhoto, setBgPhoto] = useState(null);
+  const [productPhoto, setProductPhoto] = useState(null);
+  const [productName, setProductName] = useState("MILLIMILLI 크림");
   const [charName, setCharName] = useState("MILLI");
   const [charCountry, setCharCountry] = useState("KR");
   const [charLang, setCharLang] = useState("한국어");
@@ -187,12 +188,12 @@ export default function App() {
     if (!refVideoUrl.trim()) return;
     setMakeStep(2);
     try {
-      const styleDesc = `캐릭터: ${charName}, 언어: ${charLang}, 국가: ${FLAG[charCountry]||charCountry}${facePhoto?", 얼굴 사진 있음":""}${outfitPhoto?", 의상 사진 있음":""}${bgPhoto?", 배경 사진 있음":""}`;
+      const styleDesc = `캐릭터: ${charName}, 언어: ${charLang}, 국가: ${FLAG[charCountry]||charCountry}${facePhoto?", 얼굴+의상 사진 있음":""}${bgPhoto?", 배경 사진 있음":""}${productPhoto?", 제품: "+productName+" 사진 있음":""}`;
       const data = await callClaude(
         [{role:"user",content:`TikTok 영상 URL: ${refVideoUrl}\n내 스타일 정보: ${styleDesc}\n\n이 영상을 분석해서 내 스타일로 각색해줘.`}],
-        `당신은 K뷰티 TikTok 콘텐츠 전문가입니다. 주어진 TikTok URL의 영상 구성(훅, 전개, 마무리)을 분석하고, 주어진 캐릭터 스타일로 완벽하게 각색해주세요.
+        `당신은 K뷰티 TikTok 콘텐츠 전문가입니다. 주어진 TikTok URL의 영상 구성(훅, 전개, 마무리, 제품 사용법, 말투, 템포)을 분석하고, 주어진 캐릭터와 제품으로 최대한 유사하게 각색해주세요. 제품이 있다면 영상 전반에 자연스럽게 등장시키세요.
 반드시 아래 JSON만 응답하세요 (마크다운 없이):
-{"analysis":"원본 영상 구성 분석 2-3줄","hook":"첫 3초 훅 (강렬하고 눈에 띄게, 30자 이내)","script":"30초 아바타 스크립트 (자연스럽고 말하기 좋게, 캐릭터 스타일 반영)","caption":"영상 캡션 (이모지 포함, 2줄)","hashtags":"#kbeauty #밀리밀리 #스킨케어 #뷰티 #skincare #kbeautyรoutine #glowskin"}`
+{"analysis":"원본 영상 구성 분석 (훅방식/전개/제품등장타이밍/마무리)","hook":"첫 3초 훅 (원본과 유사한 방식으로, 30자 이내)","script":"30-40초 스크립트 (원본 템포/말투 따라가되 제품명 자연스럽게 포함, 말하기 좋게)","caption":"영상 캡션 (이모지 포함, 2줄)","hashtags":"#kbeauty #밀리밀리 #스킨케어 #뷰티 #skincare #glowskin","product_placement":"영상에서 제품이 등장하는 타이밍과 방식 설명"}`
       );
       const txt = extractText(data).replace(/```json|```/g,"").trim();
       const m = txt.match(/\{[\s\S]*\}/);
@@ -208,25 +209,85 @@ export default function App() {
   };
 
   // HeyGen 영상 생성
+  // base64 이미지 → HeyGen 업로드 → asset id
+  const uploadPhotoToHeygen = async (base64, HEYGEN_KEY) => {
+    const mime = base64.includes("image/png") ? "image/png" : "image/jpeg";
+    const byteStr = atob(base64.split(",")[1]);
+    const ab = new ArrayBuffer(byteStr.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
+    const blob = new Blob([ab], { type: mime });
+    const fd = new FormData();
+    fd.append("file", blob, "photo.jpg");
+    fd.append("type", "talking_photo");
+    const r = await fetch("/heygen/v1/asset", { method:"POST", headers:{"X-Api-Key":HEYGEN_KEY}, body:fd });
+    const d = await r.json();
+    if (!d.data?.id) throw new Error("사진 업로드 실패: " + JSON.stringify(d));
+    return d.data.id;
+  };
+
   const generateVideo = async () => {
     if (!editScript.trim()) return;
-    setMakeStep(4); setHeygenError(""); setHeygenProgress(10);
+    setMakeStep(4); setHeygenError(""); setHeygenProgress(5);
     const HEYGEN_KEY = import.meta.env.VITE_HEYGEN_API_KEY;
     try {
-      const res = await fetch("/heygen/v2/video/generate",{method:"POST",
+      // 1. 얼굴/의상 사진 → Talking Photo or 기본 아바타
+      let character;
+      if (facePhoto) {
+        setHeygenProgress(15);
+        const photoId = await uploadPhotoToHeygen(facePhoto, HEYGEN_KEY);
+        character = { type:"talking_photo", talking_photo_id: photoId };
+      } else {
+        character = { type:"avatar", avatar_id:"Abigail_expressive_2024112501", avatar_style:"normal" };
+      }
+
+      // 2. 배경 사진
+      let background = { type:"color", value:"#FAFAF8" };
+      if (bgPhoto) {
+        setHeygenProgress(28);
+        const bgId = await uploadPhotoToHeygen(bgPhoto, HEYGEN_KEY);
+        background = { type:"image", id: bgId };
+      }
+
+      // 3. 제품 사진 오버레이
+      let elements = [];
+      if (productPhoto) {
+        setHeygenProgress(33);
+        const prodId = await uploadPhotoToHeygen(productPhoto, HEYGEN_KEY);
+        elements.push({
+          type: "image",
+          asset_id: prodId,
+          width: 0.28,
+          height: 0.18,
+          x: 0.64,
+          y: 0.74,
+          fit: "contain",
+        });
+      }
+
+      setHeygenProgress(38);
+      const videoInput = { character, voice:{type:"text",input_text:editScript,voice_id:"1bd001e7e50f421d891986aad5158bc8"}, background };
+      if (elements.length > 0) videoInput.elements = elements;
+
+      const res = await fetch("/heygen/v2/video/generate", {
+        method:"POST",
         headers:{"X-Api-Key":HEYGEN_KEY,"Content-Type":"application/json"},
-        body:JSON.stringify({video_inputs:[{character:{type:"avatar",avatar_id:"Abigail_expressive_2024112501",avatar_style:"normal"},voice:{type:"text",input_text:editScript,voice_id:"1bd001e7e50f421d891986aad5158bc8"}}],dimension:{width:720,height:1280}})
+        body:JSON.stringify({
+          video_inputs:[videoInput],
+          dimension:{width:720,height:1280},
+        })
       });
       const data = await res.json();
       if(data.error) throw new Error(data.error.message||"생성 실패");
       const videoId = data.data?.video_id;
       if(!videoId) throw new Error("video_id 없음");
+
       let attempts = 0;
       const timer = setInterval(async()=>{
         try {
           const sr = await fetch("/heygen/v1/video_status.get?video_id="+videoId,{headers:{"X-Api-Key":HEYGEN_KEY}});
           const sd = await sr.json();
-          setHeygenProgress(Math.min(10+attempts*8,90));
+          setHeygenProgress(Math.min(38+attempts*4,92));
           if(sd.data?.status==="completed"){
             clearInterval(timer);
             setHeygenResult({videoUrl:sd.data?.video_url,thumbnailUrl:sd.data?.thumbnail_url});
@@ -235,7 +296,7 @@ export default function App() {
             clearInterval(timer); throw new Error("영상 생성 실패");
           }
           attempts++;
-          if(attempts>60){ clearInterval(timer); throw new Error("시간 초과"); }
+          if(attempts>72){ clearInterval(timer); throw new Error("시간 초과 (6분)"); }
         } catch(e){ clearInterval(timer); setHeygenError(e.message); setMakeStep(3); }
       },5000);
     } catch(e){ setHeygenError(e.message); setMakeStep(3); }
@@ -363,9 +424,9 @@ export default function App() {
                 <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>📸 사진 업로드</div>
                 <div style={{fontSize:12,color:C.gray400,marginBottom:20}}>업로드한 사진을 기반으로 AI 아바타가 생성돼요</div>
                 <div style={{display:"flex",gap:16}}>
-                  <PhotoUpload label="얼굴 사진" icon="🧖‍♀️" value={facePhoto} onChange={setFacePhoto}/>
-                  <PhotoUpload label="의상 사진" icon="👗" value={outfitPhoto} onChange={setOutfitPhoto}/>
+                  <PhotoUpload label="얼굴+의상 사진" icon="🧖‍♀️" value={facePhoto} onChange={setFacePhoto}/>
                   <PhotoUpload label="배경 사진" icon="🌸" value={bgPhoto} onChange={setBgPhoto}/>
+                  <PhotoUpload label="제품 사진" icon="💎" value={productPhoto} onChange={setProductPhoto}/>
                 </div>
               </div>
 
@@ -398,6 +459,14 @@ export default function App() {
                   </div>
                 </div>
               </div>
+              {/* 제품명 */}
+              <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:12,padding:"16px 24px",marginBottom:20,display:"flex",alignItems:"center",gap:16}}>
+                <div style={{fontSize:14,fontWeight:600,flexShrink:0}}>💎 제품명</div>
+                <input value={productName} onChange={e=>setProductName(e.target.value)}
+                  style={{flex:1,border:`1px solid ${C.gray200}`,borderRadius:9,padding:"10px 14px",fontSize:14,outline:"none"}}
+                  placeholder="예: MILLIMILLI 500달톤 크림"/>
+                {productPhoto && <span style={{padding:"4px 12px",borderRadius:20,background:C.greenBg,color:C.green,fontSize:12,fontWeight:500,flexShrink:0}}>✓ 사진 있음</span>}
+              </div>
 
               {/* 미리보기 + 저장 */}
               <div style={{background:C.white,border:`1px solid ${C.gray200}`,borderRadius:16,padding:28}}>
@@ -424,9 +493,9 @@ export default function App() {
                     <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>{charName}</div>
                     <div style={{fontSize:14,color:C.gray400,marginBottom:12}}>{FLAG[charCountry]} {charLang}</div>
                     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                      {facePhoto&&<span style={{padding:"4px 12px",borderRadius:20,background:C.greenBg,color:C.green,fontSize:12,fontWeight:500}}>✓ 얼굴</span>}
-                      {outfitPhoto&&<span style={{padding:"4px 12px",borderRadius:20,background:C.greenBg,color:C.green,fontSize:12,fontWeight:500}}>✓ 의상</span>}
+                      {facePhoto&&<span style={{padding:"4px 12px",borderRadius:20,background:C.greenBg,color:C.green,fontSize:12,fontWeight:500}}>✓ 얼굴+의상</span>}
                       {bgPhoto&&<span style={{padding:"4px 12px",borderRadius:20,background:C.greenBg,color:C.green,fontSize:12,fontWeight:500}}>✓ 배경</span>}
+                      {productPhoto&&<span style={{padding:"4px 12px",borderRadius:20,background:C.purpleBg,color:C.purple,fontSize:12,fontWeight:500}}>✓ 제품</span>}
                       {!facePhoto&&!outfitPhoto&&!bgPhoto&&<span style={{fontSize:13,color:C.gray400}}>사진을 업로드하면 여기에 표시돼요</span>}
                     </div>
                     <div style={{marginTop:16,padding:"12px 16px",background:C.purpleBg,borderRadius:10,border:`1px solid ${C.purpleBorder}`}}>
@@ -520,6 +589,11 @@ export default function App() {
                     <div>
                       <div style={{fontSize:12,fontWeight:700,color:C.purple,marginBottom:4}}>원본 영상 분석</div>
                       <div style={{fontSize:13,color:C.gray700,lineHeight:1.7}}>{analysisResult.analysis}</div>
+                  {analysisResult.product_placement && (
+                    <div style={{marginTop:8,padding:"8px 12px",background:C.purpleBg,borderRadius:8,fontSize:12,color:C.purple}}>
+                      💎 제품 등장: {analysisResult.product_placement}
+                    </div>
+                  )}
                     </div>
                   </div>
 
@@ -564,6 +638,7 @@ export default function App() {
                             </div>
                           </div>
                           <div style={{position:"absolute",bottom:16,left:0,right:0,textAlign:"center",fontSize:10,color:"rgba(255,255,255,.6)"}}>@{charName}</div>
+                      {productPhoto && <img src={productPhoto} style={{position:"absolute",bottom:40,right:10,width:60,height:60,objectFit:"contain",borderRadius:8,background:"rgba(255,255,255,.15)",padding:4}} alt="product"/>}
                         </div>
                       </div>
                       {heygenError && <div style={{marginBottom:12,padding:"10px 14px",background:C.redBg,borderRadius:9,fontSize:12,color:C.red}}>⚠ {heygenError}</div>}
