@@ -218,9 +218,12 @@ export default function App() {
     for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
     const blob = new Blob([ab], { type: mime });
     const fd = new FormData();
-    fd.append("file", blob, "photo.jpg");
-    fd.append("type", "talking_photo");
-    const r = await fetch("/heygen/v1/asset", { method:"POST", headers:{"X-Api-Key":HEYGEN_KEY}, body:fd });
+    fd.append("file", blob, mime === "image/png" ? "photo.png" : "photo.jpg");
+    const r = await fetch("https://upload.heygen.com/v1/asset", {
+      method: "POST",
+      headers: { "X-Api-Key": HEYGEN_KEY },
+      body: fd
+    });
     const d = await r.json();
     if (!d.data?.id) throw new Error("사진 업로드 실패: " + JSON.stringify(d));
     return d.data.id;
