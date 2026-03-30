@@ -485,7 +485,7 @@ export default function App() {
                         ? <img src={facePhoto} style={{width:70,height:70,borderRadius:"50%",objectFit:"cover",border:"3px solid rgba(255,255,255,.4)"}} alt="face"/>
                         : <div style={{width:70,height:70,borderRadius:"50%",background:`linear-gradient(135deg,${C.purpleLight},${C.purpleDark})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,color:"#fff"}}>✦</div>
                       }
-                      {outfitPhoto && <img src={outfitPhoto} style={{width:50,height:50,borderRadius:8,objectFit:"cover",opacity:.8}} alt="outfit"/>}
+                      
                     </div>
                     <div style={{position:"absolute",bottom:8,left:0,right:0,textAlign:"center",fontSize:11,fontWeight:700,color:"#fff"}}>@{charName}</div>
                   </div>
@@ -496,7 +496,7 @@ export default function App() {
                       {facePhoto&&<span style={{padding:"4px 12px",borderRadius:20,background:C.greenBg,color:C.green,fontSize:12,fontWeight:500}}>✓ 얼굴+의상</span>}
                       {bgPhoto&&<span style={{padding:"4px 12px",borderRadius:20,background:C.greenBg,color:C.green,fontSize:12,fontWeight:500}}>✓ 배경</span>}
                       {productPhoto&&<span style={{padding:"4px 12px",borderRadius:20,background:C.purpleBg,color:C.purple,fontSize:12,fontWeight:500}}>✓ 제품</span>}
-                      {!facePhoto&&!outfitPhoto&&!bgPhoto&&<span style={{fontSize:13,color:C.gray400}}>사진을 업로드하면 여기에 표시돼요</span>}
+                      {!facePhoto&&!bgPhoto&&!productPhoto&&<span style={{fontSize:13,color:C.gray400}}>사진을 업로드하면 여기에 표시돼요</span>}
                     </div>
                     <div style={{marginTop:16,padding:"12px 16px",background:C.purpleBg,borderRadius:10,border:`1px solid ${C.purpleBorder}`}}>
                       <div style={{fontSize:12,color:C.gray500,marginBottom:4}}>설정 완료 후 영상 만들기 탭에서</div>
