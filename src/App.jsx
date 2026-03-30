@@ -235,13 +235,8 @@ export default function App() {
     try {
       // 1. 얼굴/의상 사진 → Talking Photo or 기본 아바타
       let character;
-      if (facePhoto) {
-        setHeygenProgress(15);
-        const photoId = await uploadPhotoToHeygen(facePhoto, HEYGEN_KEY);
-        character = { type:"talking_photo", talking_photo_id: photoId };
-      } else {
-        character = { type:"avatar", avatar_id:"Abigail_expressive_2024112501", avatar_style:"normal" };
-      }
+      // 얼굴 사진이 있어도 일단 기본 아바타 사용 (talking_photo는 별도 생성 필요)
+      character = { type:"avatar", avatar_id:"Abigail_expressive_2024112501", avatar_style:"normal" };
 
       // 2. 배경 사진
       let background = { type:"color", value:"#FAFAF8" };
