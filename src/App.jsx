@@ -248,7 +248,7 @@ export default function App() {
       if (bgPhoto) {
         setHeygenProgress(28);
         const bgId = await uploadPhotoToHeygen(bgPhoto, HEYGEN_KEY);
-        background = { type:"image", id: bgId };
+        background = { type:"image", image_asset_id: bgId };
       }
 
       // 3. 제품 사진 오버레이
