@@ -210,19 +210,16 @@ export default function App() {
 
   // HeyGen 영상 생성
   // base64 이미지 → HeyGen 업로드 → asset id
-    const uploadPhotoToHeygen = async (base64, HEYGEN_KEY) => {
+      const uploadPhotoToHeygen = async (base64, HEYGEN_KEY) => {
+    const mime = base64.includes("image/png") ? "image/png" : "image/jpeg";
+    const byteStr = atob(base64.split(",")[1]);
+    const ab = new ArrayBuffer(byteStr.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
     const r = await fetch("https://upload.heygen.com/v1/asset", {
       method: "POST",
-      headers: {
-        "X-Api-Key": HEYGEN_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        data: base64.split(",")[1],
-        type: "image",
-        name: "photo.jpg",
-        file_type: base64.includes("image/png") ? "image/png" : "image/jpeg",
-      })
+      headers: { "X-Api-Key": HEYGEN_KEY, "Content-Type": mime },
+      body: ab
     });
     const text = await r.text();
     let d;
